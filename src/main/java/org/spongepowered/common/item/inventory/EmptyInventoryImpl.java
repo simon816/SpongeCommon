@@ -32,80 +32,77 @@ import org.spongepowered.api.item.inventory.InventoryArchetypes;
 import org.spongepowered.api.item.inventory.InventoryProperty;
 import org.spongepowered.api.item.inventory.ItemStack;
 import org.spongepowered.api.item.inventory.transaction.InventoryTransactionResult;
-import org.spongepowered.api.item.inventory.transaction.InventoryTransactionResult.Type;
 import org.spongepowered.api.plugin.PluginContainer;
 import org.spongepowered.api.text.translation.Translation;
-import org.spongepowered.common.item.inventory.observer.InventoryEventArgs;
 import org.spongepowered.common.text.translation.SpongeTranslation;
-import org.spongepowered.common.util.observer.Observer;
 
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
-import java.util.NoSuchElementException;
 import java.util.Optional;
 
-/**
- * Bottom type / empty results set for inventory queries.
- */
-public class EmptyInventoryImpl implements EmptyInventory, Observer<InventoryEventArgs> {
+@SuppressWarnings("unchecked")
+public final class EmptyInventoryImpl implements EmptyInventory {
 
-    public static final Translation EMPTY_NAME = new SpongeTranslation("inventory.empty.title");
+    private static final Translation NAME = new SpongeTranslation("inventory.empty");
 
-    static final class EmptyIterator implements Iterator<Inventory> {
+    public static final EmptyInventory INSTANCE = new EmptyInventoryImpl();
 
-        @Override
-        public boolean hasNext() {
-            return false;
-        }
-
-        @Override
-        public Inventory next() {
-            throw new NoSuchElementException("Attempted to iterate over an empty Inventory");
-        }
-
-        @Override
-        public void remove() {
-            throw new NoSuchElementException("Attempted to remove an element from an empty collection");
-        }
-
+    private EmptyInventoryImpl() {
     }
 
-    private final Inventory parent;
-
-    public EmptyInventoryImpl(Inventory parent) {
-        this.parent = parent;
+    public static <T extends Inventory> T instance() {
+        return (T) INSTANCE;
     }
 
     @Override
-    public <T extends Inventory> Iterable<T> slots() {
-        return Collections.<T>emptyList();
+    public Inventory parent() {
+        return this;
     }
 
-    @SuppressWarnings("unchecked")
     @Override
     public <T extends Inventory> T first() {
         return (T) this;
     }
 
     @Override
+    public <T extends Inventory> Iterable<T> slots() {
+        return Collections.emptyList();
+    }
+
+    @Override
+    public <T extends Inventory> T next() {
+        return (T) this;
+    }
+
+    @Override
     public Optional<ItemStack> poll() {
-        return Optional.<ItemStack>empty();
+        return Optional.empty();
     }
 
     @Override
     public Optional<ItemStack> poll(int limit) {
-        return Optional.<ItemStack>empty();
+        return Optional.empty();
     }
 
     @Override
     public Optional<ItemStack> peek() {
-        return Optional.<ItemStack>empty();
+        return Optional.empty();
     }
 
     @Override
     public Optional<ItemStack> peek(int limit) {
-        return Optional.<ItemStack>empty();
+        return Optional.empty();
+    }
+
+    @Override
+    public InventoryTransactionResult offer(ItemStack stack) {
+        return InventoryTransactionResult.failNoTransactions();
+    }
+
+    @Override
+    public InventoryTransactionResult set(ItemStack stack) {
+        return InventoryTransactionResult.failNoTransactions();
     }
 
     @Override
@@ -153,99 +150,67 @@ public class EmptyInventoryImpl implements EmptyInventory, Observer<InventoryEve
 
     @Override
     public <T extends InventoryProperty<?, ?>> Collection<T> getProperties(Inventory child, Class<T> property) {
-        return Collections.<T>emptyList();
+        return Collections.emptyList();
     }
 
     @Override
     public <T extends InventoryProperty<?, ?>> Collection<T> getProperties(Class<T> property) {
-        return Collections.<T>emptyList();
+        return Collections.emptyList();
     }
 
     @Override
     public <T extends InventoryProperty<?, ?>> Optional<T> getProperty(Inventory child, Class<T> property, Object key) {
-        return Optional.<T>empty();
+        return Optional.empty();
     }
 
     @Override
     public <T extends InventoryProperty<?, ?>> Optional<T> getProperty(Class<T> property, Object key) {
-        return Optional.<T>empty();
+        return Optional.empty();
     }
 
-    @SuppressWarnings("unchecked")
     @Override
     public <T extends Inventory> T query(Class<?>... types) {
-        return (T)this;
-    }
-
-    @SuppressWarnings("unchecked")
-    @Override
-    public <T extends Inventory> T query(ItemType... types) {
-        return (T)this;
-    }
-
-    @SuppressWarnings("unchecked")
-    @Override
-    public <T extends Inventory> T query(ItemStack... types) {
-        return (T)this;
-    }
-
-    @SuppressWarnings("unchecked")
-    @Override
-    public <T extends Inventory> T query(InventoryProperty<?, ?>... props) {
-        return (T)this;
-    }
-
-    @SuppressWarnings("unchecked")
-    @Override
-    public <T extends Inventory> T query(Translation... names) {
-        return (T)this;
-    }
-
-    @SuppressWarnings("unchecked")
-    @Override
-    public <T extends Inventory> T query(String... names) {
-        return (T)this;
-    }
-
-    @SuppressWarnings("unchecked")
-    @Override
-    public <T extends Inventory> T query(Object... args) {
-        return (T)this;
-    }
-
-    @Override
-    public Iterator<Inventory> iterator() {
-        return new EmptyIterator();
-    }
-
-    @Override
-    public Inventory parent() {
-        return this.parent;
-    }
-
-    @SuppressWarnings("unchecked")
-    @Override
-    public <T extends Inventory> T next() {
         return (T) this;
     }
 
     @Override
-    public InventoryTransactionResult offer(ItemStack stack) {
-        return InventoryTransactionResult.builder().type(Type.FAILURE).reject(stack).build();
+    public <T extends Inventory> T query(ItemType... types) {
+        return (T) this;
     }
 
     @Override
-    public InventoryTransactionResult set(ItemStack stack) {
-        return InventoryTransactionResult.builder().type(Type.FAILURE).reject(stack).build();
+    public <T extends Inventory> T query(ItemStack... types) {
+        return (T) this;
+    }
+
+    @Override
+    public <T extends Inventory> T query(InventoryProperty<?, ?>... props) {
+        return (T) this;
+    }
+
+    @Override
+    public <T extends Inventory> T query(Translation... names) {
+        return (T) this;
+    }
+
+    @Override
+    public <T extends Inventory> T query(String... names) {
+        return (T) this;
+    }
+
+    @Override
+    public <T extends Inventory> T query(Object... args) {
+        return (T) this;
+    }
+
+    @Override
+    public Iterator<Inventory> iterator() {
+        return Collections.emptyIterator();
     }
 
     @Override
     public Translation getName() {
-        return EmptyInventoryImpl.EMPTY_NAME;
-    }
-
-    @Override
-    public void notify(Object source, InventoryEventArgs eventArgs) {
+        return EmptyInventoryImpl.NAME;
     }
 
     @Override

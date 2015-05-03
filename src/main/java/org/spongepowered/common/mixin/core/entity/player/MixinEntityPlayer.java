@@ -42,6 +42,7 @@ import net.minecraft.init.Items;
 import net.minecraft.init.MobEffects;
 import net.minecraft.init.SoundEvents;
 import net.minecraft.inventory.Container;
+import net.minecraft.inventory.ContainerPlayer;
 import net.minecraft.inventory.InventoryEnderChest;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemAxe;
@@ -67,6 +68,7 @@ import net.minecraft.util.text.TextComponentString;
 import net.minecraft.world.LockCode;
 import net.minecraft.world.World;
 import net.minecraft.world.WorldServer;
+import org.spongepowered.api.entity.living.player.Player;
 import org.spongepowered.api.event.SpongeEventFactory;
 import org.spongepowered.api.event.cause.Cause;
 import org.spongepowered.api.event.cause.NamedCause;
@@ -75,6 +77,9 @@ import org.spongepowered.api.event.cause.entity.damage.DamageTypes;
 import org.spongepowered.api.event.cause.entity.damage.source.EntityDamageSource;
 import org.spongepowered.api.event.entity.AttackEntityEvent;
 import org.spongepowered.api.event.entity.DamageEntityEvent;
+import org.spongepowered.api.item.inventory.Carrier;
+import org.spongepowered.api.item.inventory.entity.PlayerInventory;
+import org.spongepowered.api.item.inventory.type.CarriedInventory;
 import org.spongepowered.api.util.Tuple;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
@@ -93,6 +98,7 @@ import org.spongepowered.common.event.damage.DamageEventHandler;
 import org.spongepowered.common.interfaces.ITargetedLocation;
 import org.spongepowered.common.interfaces.entity.IMixinEntity;
 import org.spongepowered.common.interfaces.entity.player.IMixinEntityPlayer;
+import org.spongepowered.common.item.inventory.HumanInventoryImpl;
 import org.spongepowered.common.item.inventory.util.ItemStackUtil;
 import org.spongepowered.common.mixin.core.entity.MixinEntityLivingBase;
 import org.spongepowered.common.text.SpongeTexts;
@@ -171,6 +177,33 @@ public abstract class MixinEntityPlayer extends MixinEntityLivingBase implements
             this.getEntityData().setTag(NbtDataUtil.SPONGE_DATA, old.getCompoundTag(NbtDataUtil.SPONGE_DATA));
             this.readFromNbt(this.getSpongeData());
         }
+    }
+
+    private PlayerInventory playerInventory;
+
+
+    public double getExhaustion() {
+        return this.foodStats.foodExhaustionLevel;
+    }
+
+    public void setExhaustion(double exhaustion) {
+        this.foodStats.foodExhaustionLevel = (float) exhaustion;
+    }
+
+    public double getSaturation() {
+        return this.foodStats.getSaturationLevel();
+    }
+
+    public void setSaturation(double saturation) {
+        this.foodStats.foodSaturationLevel = (float) saturation;
+    }
+
+    public double getFoodLevel() {
+        return this.foodStats.getFoodLevel();
+    }
+
+    public void setFoodLevel(double hunger) {
+        this.foodStats.setFoodLevel((int) hunger);
     }
 
     // utility method for getting the total experience at an arbitrary level
@@ -691,5 +724,16 @@ public abstract class MixinEntityPlayer extends MixinEntityLivingBase implements
         }
     }
 
+
+    public boolean isViewingInventory() {
+        return this.openContainer != null;
+    }
+
+    public CarriedInventory<? extends Carrier> getInventory() {
+        if (this.playerInventory == null) {
+            this.playerInventory = new HumanInventoryImpl((Player) this, this.inventory, (ContainerPlayer) this.inventoryContainer);
+        }
+        return this.playerInventory;
+    }
 
 }

@@ -325,6 +325,7 @@
         "item.data.MixinItemWrittenBook",
         "item.inventory.MixinContainer",
         "item.inventory.MixinContainerCarrier",
+        "item.inventory.MixinInventoryCrafting",
         "item.inventory.MixinSlot",
         "item.inventory.MixinSlotCrafting",
         "item.inventory.TraitInventoryAdapter",

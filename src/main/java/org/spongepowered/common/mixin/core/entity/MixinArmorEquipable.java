@@ -26,37 +26,86 @@ package org.spongepowered.common.mixin.core.entity;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import net.minecraft.entity.item.EntityArmorStand;
-import net.minecraft.entity.monster.EntityGiantZombie;
-import net.minecraft.entity.monster.EntitySkeleton;
-import net.minecraft.entity.monster.EntityZombie;
-import net.minecraft.entity.player.EntityPlayerMP;
+import com.google.common.collect.ImmutableMap;
+import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.inventory.EntityEquipmentSlot;
+import net.minecraft.item.ItemArmor;
 import net.minecraft.util.EnumHand;
+import net.minecraft.world.World;
 import org.spongepowered.api.data.type.HandType;
+import org.spongepowered.api.data.type.HandTypes;
 import org.spongepowered.api.entity.ArmorEquipable;
 import org.spongepowered.api.item.ItemTypes;
+import org.spongepowered.api.item.inventory.Carrier;
 import org.spongepowered.api.item.inventory.ItemStack;
+import org.spongepowered.api.item.inventory.equipment.EquipmentInventory;
+import org.spongepowered.api.item.inventory.equipment.EquipmentType;
+import org.spongepowered.api.item.inventory.equipment.EquipmentTypeWorn;
+import org.spongepowered.api.item.inventory.equipment.EquipmentTypes;
+import org.spongepowered.api.item.inventory.type.CarriedInventory;
 import org.spongepowered.asm.mixin.Implements;
 import org.spongepowered.asm.mixin.Interface;
-import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.common.entity.living.human.EntityHuman;
+import org.spongepowered.common.item.inventory.IndexMappedInventory;
 
 import java.util.Optional;
 
 import javax.annotation.Nullable;
 
 // All implementors of ArmorEquipable
-@Mixin({EntityArmorStand.class, EntityGiantZombie.class, EntityPlayerMP.class, EntitySkeleton.class, EntityZombie.class, EntityHuman.class})
+//@Mixin({EntityArmorStand.class, EntityGiantZombie.class, EntityPlayerMP.class, EntitySkeleton.class, EntityZombie.class, EntityHuman.class})
 @Implements(@Interface(iface = ArmorEquipable.class, prefix = "equipable$"))
-public abstract class MixinArmorEquipable extends MixinEntityLivingBase {
+public abstract class MixinArmorEquipable extends EntityLivingBase {
+
+    private static class Getter implements IndexMappedInventory.Getter {
+
+        private EntityLivingBase entity;
+
+        public Getter(EntityLivingBase armorEquipable) {
+            this.entity = armorEquipable;
+        }
+
+        @Override
+        public ItemStack getItem(Integer index) {
+            // TODO slot index
+            return (ItemStack) this.entity.getItemStackFromSlot(EntityEquipmentSlot.values()[index]);
+        }
+    }
+
+    private static class Setter implements IndexMappedInventory.Setter {
+
+        private EntityLivingBase entity;
+
+        public Setter(EntityLivingBase armorEquipable) {
+            this.entity = armorEquipable;
+        }
+
+        @Override
+        public void setItem(Integer index, ItemStack item) {
+            // TODO slot index
+            this.entity.setItemStackToSlot(EntityEquipmentSlot.values()[index], (net.minecraft.item.ItemStack) item);
+        }
+    }
+
+    private final EquipmentInventory armorInventory = new IndexMappedInventory(ImmutableMap.<Integer, EquipmentType>builder()
+            .put(EntityEquipmentSlot.MAINHAND.getSlotIndex(), EquipmentTypes.EQUIPPED)
+            .put(EntityEquipmentSlot.FEET.getSlotIndex(), EquipmentTypes.BOOTS)
+            .put(EntityEquipmentSlot.LEGS.getSlotIndex(), EquipmentTypes.LEGGINGS)
+            .put(EntityEquipmentSlot.CHEST.getSlotIndex(), EquipmentTypes.CHESTPLATE)
+            .put(EntityEquipmentSlot.HEAD.getSlotIndex(), EquipmentTypes.HEADWEAR)
+            .build(), new Getter(this), new Setter(this));
+
+    public MixinArmorEquipable(World worldIn) {
+        super(worldIn);
+    }
 
     public Optional<ItemStack> equipable$getHelmet() {
         @Nullable final net.minecraft.item.ItemStack itemStack = this.getItemStackFromSlot(EntityEquipmentSlot.HEAD);
+        //final net.minecraft.item.ItemStack itemStack = this.getEquipmentInSlot(SLOT_HELMET);
         return Optional.ofNullable(itemStack == null ? null : (ItemStack) itemStack.copy());
     }
 
     public void equipable$setHelmet(ItemStack helmet) {
+        this.armorInventory.set(EquipmentTypes.HEADWEAR, helmet);
         if (helmet == null || helmet.getItem() == ItemTypes.NONE) {
             this.setItemStackToSlot(EntityEquipmentSlot.HEAD, null);
         } else {
@@ -116,5 +165,53 @@ public abstract class MixinArmorEquipable extends MixinEntityLivingBase {
         } else {
             this.setHeldItem((EnumHand) (Object) handType, ((net.minecraft.item.ItemStack) itemInHand.copy()));
         }
+    }
+
+    public boolean equipable$canEquip(EquipmentType type) {
+        return type instanceof EquipmentTypeWorn;
+    }
+
+    public boolean equipable$canEquip(EquipmentType type, ItemStack equipment) {
+        // TODO Auto-generated method stub
+        return this.equipable$canEquip(type) && (equipment == null || equipment.getItem() instanceof ItemArmor);
+    }
+
+    public Optional<ItemStack> equipable$getEquipped(EquipmentType type) {
+        if (type == EquipmentTypes.HEADWEAR) {
+            return this.equipable$getHelmet();
+        } else if (type == EquipmentTypes.CHESTPLATE) {
+            return this.equipable$getChestplate();
+        } else if (type == EquipmentTypes.LEGGINGS) {
+            return this.equipable$getLeggings();
+        } else if (type == EquipmentTypes.BOOTS) {
+            return this.equipable$getBoots();
+        } else if (type == EquipmentTypes.EQUIPPED) {
+            return this.equipable$getItemInHand(HandTypes.MAIN_HAND);
+        }
+        return Optional.empty();
+    }
+
+    public boolean equipable$equip(EquipmentType type, ItemStack equipment) {
+        if (type == EquipmentTypes.HEADWEAR) {
+            this.equipable$setHelmet(equipment);
+            return true;
+        } else if (type == EquipmentTypes.CHESTPLATE) {
+            this.equipable$setChestplate(equipment);
+            return true;
+        } else if (type == EquipmentTypes.LEGGINGS) {
+            this.equipable$setLeggings(equipment);
+            return true;
+        } else if (type == EquipmentTypes.BOOTS) {
+            this.equipable$setBoots(equipment);
+            return true;
+        } else if (type == EquipmentTypes.EQUIPPED) {
+            this.equipable$setItemInHand(HandTypes.MAIN_HAND, equipment);
+            return true;
+        }
+        return false;
+    }
+
+    public CarriedInventory<? extends Carrier> equipable$getInventory() {
+        return this.armorInventory;
     }
 }
