@@ -29,7 +29,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import org.spongepowered.api.data.DataContainer;
 import org.spongepowered.api.data.DataHolder;
 import org.spongepowered.api.data.DataTransactionResult;
@@ -38,18 +37,15 @@ import org.spongepowered.api.data.manipulator.DataManipulator;
 import org.spongepowered.api.data.manipulator.ImmutableDataManipulator;
 import org.spongepowered.api.data.merge.MergeFunction;
 import org.spongepowered.api.data.value.BaseValue;
-import org.spongepowered.api.data.value.ValueContainer;
 import org.spongepowered.api.data.value.immutable.ImmutableValue;
 import org.spongepowered.api.data.value.mutable.Value;
 import org.spongepowered.api.entity.EntityType;
 import org.spongepowered.common.SpongeImpl;
 import org.spongepowered.common.data.DataProcessor;
 import org.spongepowered.common.data.SpongeDataManager;
-import org.spongepowered.common.data.ValueProcessor;
 import org.spongepowered.common.data.util.DataUtil;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map.Entry;
 import java.util.Optional;
@@ -58,8 +54,7 @@ import java.util.stream.Collectors;
 public abstract class AbstractSpongeDataProcessor<M extends DataManipulator<M, I>, I extends ImmutableDataManipulator<I, M>>
         implements DataProcessor<M, I> {
 
-    protected static abstract class KeyValueProcessor<H, E, V extends BaseValue<E>> {
-
+    protected static abstract class KeyValueProcessorBase<H, E, V extends BaseValue<E>> {
 
         /**
          * Gets the current value of this key on the holder, if exists. It is
@@ -68,11 +63,8 @@ public abstract class AbstractSpongeDataProcessor<M extends DataManipulator<M, I
          * @param holder
          * @return
          */
-        protected Optional<E> get(H holder) {
-            return Optional.empty();
-        }
+        protected abstract Optional<E> get(H holder);
 
-        // Override to avoid overhead of get()
         /**
          * Returns whether the holder has a value. Override this if a call to
          * avoid any overhead of {@link #get}. It is safe to assume the holder
@@ -81,17 +73,13 @@ public abstract class AbstractSpongeDataProcessor<M extends DataManipulator<M, I
          * @param holder
          * @return
          */
-        protected boolean hasData(H holder) {
-            return get(holder).isPresent();
-        }
+        protected abstract boolean hasData(H holder);
 
         /**
-        *
-        * @return
-        */
-        protected int getPriority() {
-            return 100;
-        }
+         *
+         * @return
+         */
+        protected abstract int getPriority();
 
         /**
          * Sets the value on the holder. It is safe to assume the holder is
@@ -101,9 +89,7 @@ public abstract class AbstractSpongeDataProcessor<M extends DataManipulator<M, I
          * @param value
          * @return
          */
-        protected boolean set(H holder, E value) {
-            return false;
-        }
+        protected abstract boolean set(H holder, E value);
 
         /**
          * Removes the data from the holder. It is safe to assume the holder is
@@ -112,9 +98,7 @@ public abstract class AbstractSpongeDataProcessor<M extends DataManipulator<M, I
          * @param holder
          * @return
          */
-        protected boolean remove(H holder) {
-            return false;
-        }
+        protected abstract boolean remove(H holder);
 
         /**
          * Returns whether the data holder can support this key.
@@ -122,9 +106,7 @@ public abstract class AbstractSpongeDataProcessor<M extends DataManipulator<M, I
          * @param holder
          * @return
          */
-        protected boolean supports(H holder) {
-            return true;
-        }
+        protected abstract boolean supports(H holder);
 
         /**
          * Builds a {@link Value} of the type produced by this processor from an
@@ -135,6 +117,50 @@ public abstract class AbstractSpongeDataProcessor<M extends DataManipulator<M, I
          */
         protected abstract V constructValue(E value);
 
+        protected abstract Optional<V> constructValueForHolder(H holder);
+
+        /**
+         *
+         * @param value
+         * @return
+         */
+        protected abstract ImmutableValue<E> constructImmutableValue(E value);
+
+    }
+
+    protected static abstract class KeyValueProcessor<H, E, V extends BaseValue<E>> extends KeyValueProcessorBase<H, E, V> {
+
+        @Override
+        protected Optional<E> get(H holder) {
+            return Optional.empty();
+        }
+
+        @Override
+        protected boolean hasData(H holder) {
+            return get(holder).isPresent();
+        }
+
+        @Override
+        protected int getPriority() {
+            return 100;
+        }
+
+        @Override
+        protected boolean set(H holder, E value) {
+            return false;
+        }
+
+        @Override
+        protected boolean remove(H holder) {
+            return false;
+        }
+
+        @Override
+        protected boolean supports(H holder) {
+            return true;
+        }
+
+        @Override
         protected Optional<V> constructValueForHolder(H holder) {
             if (!supports(holder)) {
                 return Optional.empty();
@@ -146,11 +172,7 @@ public abstract class AbstractSpongeDataProcessor<M extends DataManipulator<M, I
             return Optional.empty();
         }
 
-        /**
-         *
-         * @param value
-         * @return
-         */
+        @Override
         protected abstract ImmutableValue<E> constructImmutableValue(E value);
     }
 
@@ -162,17 +184,17 @@ public abstract class AbstractSpongeDataProcessor<M extends DataManipulator<M, I
         }
     }
 
-    private final HashMap<Class<?>, KeyValueProcessor<Object, Object, ?>> classToProcessorMap = Maps.newHashMap();
-    private final BiMap<KeyValueProcessor<Object, Object, ?>, Key<?>> processorToKeyMap = HashBiMap.create();
+    private final BiMap<Class<?>, KeyValueProcessor<Object, Object, ?>> classToProcessorMap = HashBiMap.create();
+    private final BiMap<KeyValueProcessorBase<Object, Object, ?>, Key<?>> processorToKeyMap = HashBiMap.create();
 
     @SuppressWarnings("unchecked")
     protected final <H, E, V extends BaseValue<E>> void registerValueProcessor(Key<V> key, Class<H> holderClass,
-            KeyValueProcessor<H, E, V> processor) {
+            KeyValueProcessorBase<H, E, V> processor) {
         if (this.classToProcessorMap.containsKey(holderClass) || this.processorToKeyMap.containsKey(processor)) {
             throw new IllegalArgumentException();
         }
         this.classToProcessorMap.put(holderClass, (KeyValueProcessor<Object, Object, ?>) processor);
-        this.processorToKeyMap.put((KeyValueProcessor<Object, Object, ?>) processor, key);
+        this.processorToKeyMap.put((KeyValueProcessorBase<Object, Object, ?>) processor, key);
     }
 
     @Override
@@ -268,7 +290,7 @@ public abstract class AbstractSpongeDataProcessor<M extends DataManipulator<M, I
         final M merged = checkNotNull(function).merge(old.orElse(null), manipulator);
         try {
             for (ImmutableValue<?> value : merged.getValues()) {
-                KeyValueProcessor<Object, Object, ?> processor = this.processorToKeyMap.inverse().get(value.getKey());
+                KeyValueProcessorBase<Object, Object, ?> processor = this.processorToKeyMap.inverse().get(value.getKey());
                 if (processor != null && processor.set(dataHolder, value.get())) {
                     builder.result(DataTransactionResult.Type.SUCCESS).success(value);
                     if (old.isPresent()) {
@@ -321,90 +343,9 @@ public abstract class AbstractSpongeDataProcessor<M extends DataManipulator<M, I
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     public void registerValueProcessors(SpongeDataManager manager) {
-        for (Entry<KeyValueProcessor<Object, Object, ?>, Key<?>> entry : this.processorToKeyMap.entrySet()) {
-            manager.registerValueProcessor((Key) entry.getValue(), new TemporaryValueProcessor(entry.getValue(), entry.getKey()));
+        for (Entry<KeyValueProcessorBase<Object, Object, ?>, Key<?>> entry : this.processorToKeyMap.entrySet()) {
+            manager.registerValueProcessor((Key) entry.getValue(), new TemporaryValueProcessor(entry.getValue(), entry.getKey(), this.classToProcessorMap.inverse().get(entry.getKey())));
         }
-    }
-
-    private static class TemporaryValueProcessor<E, V extends BaseValue<E>> implements ValueProcessor<E, V> {
-
-        private final KeyValueProcessor<Object, E, V> processor;
-        private final Key<? extends BaseValue<E>> key;
-
-        public TemporaryValueProcessor(Key<? extends BaseValue<E>> key, KeyValueProcessor<Object, E, V> processor) {
-            this.processor = processor;
-            this.key = key;
-        }
-
-        @Override
-        public Key<? extends BaseValue<E>> getKey() {
-            return this.key;
-        }
-
-        @Override
-        public int getPriority() {
-            return this.processor.getPriority();
-        }
-
-        @Override
-        public Optional<E> getValueFromContainer(ValueContainer<?> container) {
-            if (!supports(container)) {
-                return Optional.empty();
-            } else {
-                return this.processor.get(container);
-            }
-        }
-
-        @Override
-        public Optional<V> getApiValueFromContainer(ValueContainer<?> container) {
-            return this.processor.constructValueForHolder(container);
-        }
-
-        @Override
-        public boolean supports(ValueContainer<?> container) {
-            return this.processor.supports(container);
-        }
-
-        @Override
-        public DataTransactionResult offerToStore(ValueContainer<?> container, E value) {
-            final ImmutableValue<E> newValue = this.processor.constructImmutableValue(value);
-            if (supports(container)) {
-                final DataTransactionResult.Builder builder = DataTransactionResult.builder();
-                this.processor.constructValueForHolder(container);
-                final Optional<E> oldVal = this.processor.get(container);
-                try {
-                    if (this.processor.set(container, value)) {
-                        if (oldVal.isPresent()) {
-                            builder.replace(this.processor.constructImmutableValue(oldVal.get()));
-                        }
-                        return builder.result(DataTransactionResult.Type.SUCCESS).success(newValue).build();
-                    }
-                    return builder.result(DataTransactionResult.Type.FAILURE).reject(newValue).build();
-                } catch (Exception e) {
-                    SpongeImpl.getLogger().debug("An exception occurred when setting data: ", e);
-                    return builder.result(DataTransactionResult.Type.ERROR).reject(newValue).build();
-                }
-            }
-            return DataTransactionResult.failResult(newValue);
-        }
-
-        @Override
-        public DataTransactionResult removeFrom(ValueContainer<?> container) {
-            Optional<E> oldValue = this.processor.get(container);
-            if (!oldValue.isPresent()) {
-                return DataTransactionResult.successNoData();
-            }
-            try {
-                if (this.processor.remove(container)) {
-                    return DataTransactionResult.successRemove(this.processor.constructImmutableValue(oldValue.get()));
-                }
-                return DataTransactionResult.failNoData();
-            } catch (Exception e) {
-                SpongeImpl.getLogger().error("An exception occurred when removing data", e);
-                return DataTransactionResult.builder().result(DataTransactionResult.Type.ERROR).build();
-            }
-        }
-
     }
 
 }

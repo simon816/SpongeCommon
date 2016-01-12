@@ -420,7 +420,7 @@ public final class SpongeDataManager implements DataManager {
     registerDualProcessor(Class<T> manipulatorClass, Class<? extends T> implClass, Class<I> immutableDataManipulator,
             Class<? extends I> implImClass, AbstractSingleDataSingleTargetProcessor<?, E, V, T, I> processor) {
         registerDataProcessorAndImpl(manipulatorClass, implClass, immutableDataManipulator, implImClass, processor);
-        registerValueProcessor(processor.getKey(), processor);
+        registerValueProcessor(processor.getKey(), processor.asValueProcessor());
     }
     /**
      * Gets the {@link DataProcessorDelegate} for the provided

@@ -38,6 +38,7 @@ import org.spongepowered.api.data.value.ValueContainer;
 import org.spongepowered.api.data.value.immutable.ImmutableValue;
 import org.spongepowered.api.data.value.mutable.Value;
 import org.spongepowered.common.SpongeImpl;
+import org.spongepowered.common.data.ValueProcessor;
 import org.spongepowered.common.data.util.DataUtil;
 
 import java.util.Optional;
@@ -45,7 +46,7 @@ import java.util.Optional;
 public abstract class AbstractSingleDataSingleTargetProcessor<Holder, T, V extends BaseValue<T>, M extends DataManipulator<M, I>, I extends ImmutableDataManipulator<I, M>>
         extends AbstractSpongeDataProcessor<M, I> {
 
-    private class Processor extends AbstractSpongeDataProcessor.KeyValueProcessor<Holder, T, V> {
+    private class Processor extends KeyValueProcessorBase<Holder, T, V> {
 
         @Override
         protected Optional<T> get(Holder holder) {
@@ -87,13 +88,21 @@ public abstract class AbstractSingleDataSingleTargetProcessor<Holder, T, V exten
             return AbstractSingleDataSingleTargetProcessor.this.constructImmutableValue(value);
         }
 
+        @Override
+        protected Optional<V> constructValueForHolder(Holder holder) {
+            return AbstractSingleDataSingleTargetProcessor.this.constructValueForHolder(holder);
+        }
+
     }
 
     protected final Key<V> key;
     protected final Class<Holder> holderClass;
+    private final ValueProcessor<T, V> valueProcessor;
 
     protected AbstractSingleDataSingleTargetProcessor(Key<V> key, Class<Holder> holderClass) {
-        registerValueProcessor(this.key = checkNotNull(key), this.holderClass = checkNotNull(holderClass), new Processor());
+        Processor processor = new Processor();
+        registerValueProcessor(this.key = checkNotNull(key), this.holderClass = checkNotNull(holderClass), processor);
+        this.valueProcessor = new TemporaryValueProcessor<>(key, processor, holderClass);
     }
 
     // TODO Rename to get(Holder)
@@ -119,6 +128,17 @@ public abstract class AbstractSingleDataSingleTargetProcessor<Holder, T, V exten
     protected abstract V constructValue(T value);
 
     protected abstract ImmutableValue<T> constructImmutableValue(T value);
+
+    protected Optional<V> constructValueForHolder(Holder holder) {
+        if (!supports(holder)) {
+            return Optional.empty();
+        }
+        Optional<T> value = getVal(holder);
+        if (value.isPresent()) {
+            return Optional.of(constructValue(value.get()));
+        }
+        return Optional.empty();
+    }
 
     @SuppressWarnings("unchecked")
     @Override
@@ -227,5 +247,13 @@ public abstract class AbstractSingleDataSingleTargetProcessor<Holder, T, V exten
     @Override
     public final DataTransactionResult remove(DataHolder dataHolder) {
         return removeFrom(dataHolder);
+    }
+
+    public Key<V> getKey() {
+        return this.key;
+    }
+
+    public final ValueProcessor<T, V> asValueProcessor() {
+        return this.valueProcessor;
     }
 }
