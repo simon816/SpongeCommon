@@ -26,49 +26,31 @@ package org.spongepowered.common.data.processor.multi.entity;
 
 import static org.spongepowered.common.data.util.DataUtil.getData;
 
-import com.google.common.collect.ImmutableMap;
 import net.minecraft.entity.EntityLivingBase;
 import org.spongepowered.api.data.DataContainer;
 import org.spongepowered.api.data.DataHolder;
 import org.spongepowered.api.data.DataTransactionResult;
-import org.spongepowered.api.data.key.Key;
 import org.spongepowered.api.data.key.Keys;
 import org.spongepowered.api.data.manipulator.immutable.entity.ImmutableBreathingData;
 import org.spongepowered.api.data.manipulator.mutable.entity.BreathingData;
+import org.spongepowered.api.data.value.mutable.MutableBoundedValue;
 import org.spongepowered.common.data.manipulator.mutable.entity.SpongeBreathingData;
-import org.spongepowered.common.data.processor.common.AbstractEntityDataProcessor;
+import org.spongepowered.common.data.processor.common.AbstractSpongeDataProcessor;
+import org.spongepowered.common.data.value.SpongeValueFactory;
 import org.spongepowered.common.interfaces.entity.IMixinEntityLivingBase;
 
-import java.util.Map;
 import java.util.Optional;
 
-public class BreathingDataProcessor extends AbstractEntityDataProcessor<EntityLivingBase, BreathingData, ImmutableBreathingData> {
+public class BreathingDataProcessor extends AbstractSpongeDataProcessor<BreathingData, ImmutableBreathingData> {
 
     public BreathingDataProcessor() {
-        super(EntityLivingBase.class);
+        registerValueProcessor(Keys.MAX_AIR, EntityLivingBase.class, new MaxAirProcessor());
+        registerValueProcessor(Keys.REMAINING_AIR, EntityLivingBase.class, new RemainingAirProcessor());
     }
 
     @Override
     protected BreathingData createManipulator() {
         return new SpongeBreathingData(300, 300);
-    }
-
-    @Override
-    protected boolean doesDataExist(EntityLivingBase entity) {
-        return entity.isInWater();
-    }
-
-    @Override
-    protected boolean set(EntityLivingBase entity, Map<Key<?>, Object> keyValues) {
-        final int maxAir = (Integer) keyValues.get(Keys.MAX_AIR);
-        final int air = (Integer) keyValues.get(Keys.REMAINING_AIR);
-        entity.setAir(air);
-        return true;
-    }
-
-    @Override
-    protected Map<Key<?>, ?> getValues(EntityLivingBase entity) {
-        return ImmutableMap.<Key<?>, Object>of(Keys.MAX_AIR, ((IMixinEntityLivingBase) entity).getMaxAir(), Keys.REMAINING_AIR, entity.getAir());
     }
 
     @Override
@@ -81,5 +63,65 @@ public class BreathingDataProcessor extends AbstractEntityDataProcessor<EntityLi
     @Override
     public DataTransactionResult remove(DataHolder dataHolder) {
         return DataTransactionResult.failNoData();
+    }
+
+    private static class RemainingAirProcessor extends KeyValueProcessor2<EntityLivingBase, Integer, MutableBoundedValue<Integer>> {
+
+        @Override
+        protected boolean hasData(EntityLivingBase entity) {
+            return entity.isInWater();
+        }
+
+        @Override
+        protected Optional<Integer> get(EntityLivingBase entity) {
+            return Optional.of(entity.getAir());
+        }
+
+        @Override
+        protected boolean set(EntityLivingBase entity, Integer air) {
+            entity.setAir(air);
+            return true;
+        }
+
+        @Override
+        protected MutableBoundedValue<Integer> constructValue(Integer defaultValue) {
+            return SpongeValueFactory.boundedBuilder(Keys.REMAINING_AIR)
+                    .defaultValue(300)
+                    .minimum(-20)
+                    .maximum(Integer.MAX_VALUE)
+                    .actualValue(defaultValue)
+                    .build();
+        }
+
+    }
+
+    private static class MaxAirProcessor extends KeyValueProcessor2<EntityLivingBase, Integer, MutableBoundedValue<Integer>> {
+
+        @Override
+        protected boolean hasData(EntityLivingBase entity) {
+            return entity.isInWater();
+        }
+
+        @Override
+        protected Optional<Integer> get(EntityLivingBase entity) {
+            return Optional.of(((IMixinEntityLivingBase) entity).getMaxAir());
+        }
+
+        @Override
+        protected boolean set(EntityLivingBase entity, Integer maxAir) {
+            ((IMixinEntityLivingBase) entity).setMaxAir(maxAir);
+            return true;
+        }
+
+        @Override
+        protected MutableBoundedValue<Integer> constructValue(Integer defaultValue) {
+            return SpongeValueFactory.boundedBuilder(Keys.MAX_AIR)
+                    .defaultValue(300)
+                    .minimum(0)
+                    .maximum(Integer.MAX_VALUE)
+                    .actualValue(defaultValue)
+                    .build();
+        }
+
     }
 }

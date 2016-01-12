@@ -26,50 +26,29 @@ package org.spongepowered.common.data.processor.multi.entity;
 
 import static org.spongepowered.common.data.util.DataUtil.getData;
 
-import com.google.common.collect.ImmutableMap;
 import net.minecraft.entity.player.EntityPlayer;
 import org.spongepowered.api.data.DataContainer;
-import org.spongepowered.api.data.DataHolder;
-import org.spongepowered.api.data.DataTransactionResult;
-import org.spongepowered.api.data.key.Key;
 import org.spongepowered.api.data.key.Keys;
 import org.spongepowered.api.data.manipulator.immutable.entity.ImmutableMovementSpeedData;
 import org.spongepowered.api.data.manipulator.mutable.entity.MovementSpeedData;
+import org.spongepowered.api.data.value.immutable.ImmutableValue;
+import org.spongepowered.api.data.value.mutable.Value;
 import org.spongepowered.common.data.manipulator.mutable.entity.SpongeMovementSpeedData;
-import org.spongepowered.common.data.processor.common.AbstractEntityDataProcessor;
+import org.spongepowered.common.data.processor.common.AbstractSpongeDataProcessor;
+import org.spongepowered.common.data.util.DataConstants;
+import org.spongepowered.common.data.value.mutable.SpongeValue;
 
-import java.util.Map;
 import java.util.Optional;
 
-public class MovementSpeedDataProcessor extends AbstractEntityDataProcessor<EntityPlayer, MovementSpeedData, ImmutableMovementSpeedData> {
+public class MovementSpeedDataProcessor extends AbstractSpongeDataProcessor<MovementSpeedData, ImmutableMovementSpeedData> {
 
     public MovementSpeedDataProcessor() {
-        super(EntityPlayer.class);
+        registerValueProcessor(Keys.WALKING_SPEED, EntityPlayer.class, new WalkSpeedProcessor());
+        registerValueProcessor(Keys.FLYING_SPEED, EntityPlayer.class, new FlySpeedProcessor());
     }
 
     @Override
-    protected boolean doesDataExist(EntityPlayer entity) {
-        return true;
-    }
-
-    @Override
-    protected boolean set(EntityPlayer entity, Map<Key<?>, Object> keyValues) {
-        entity.capabilities.walkSpeed = ((Double) keyValues.get(Keys.WALKING_SPEED)).floatValue();
-        entity.capabilities.flySpeed = ((Double) keyValues.get(Keys.FLYING_SPEED)).floatValue();
-        entity.sendPlayerAbilities();
-        return true;
-    }
-
-    @Override
-    protected Map<Key<?>, ?> getValues(EntityPlayer entity) {
-        final double walkSpeed = entity.capabilities.getWalkSpeed();
-        final double flySpeed = entity.capabilities.getFlySpeed();
-        return ImmutableMap.<Key<?>, Object>of(Keys.WALKING_SPEED, walkSpeed,
-                Keys.FLYING_SPEED, flySpeed);
-    }
-
-    @Override
-    protected MovementSpeedData createManipulator() {
+    public MovementSpeedData createManipulator() {
         return new SpongeMovementSpeedData();
     }
 
@@ -80,8 +59,66 @@ public class MovementSpeedDataProcessor extends AbstractEntityDataProcessor<Enti
         return Optional.of(movementSpeedData);
     }
 
-    @Override
-    public DataTransactionResult remove(DataHolder dataHolder) {
-        return DataTransactionResult.failNoData();
+    private static class WalkSpeedProcessor extends KeyValueProcessor<EntityPlayer, Double, Value<Double>> {
+
+        @Override
+        protected boolean hasData(EntityPlayer entity) {
+            return true;
+        }
+
+        @Override
+        protected Value<Double> constructValue(Double defaultValue) {
+            return new SpongeValue<>(Keys.WALKING_SPEED, 0.7D);
+        }
+
+        @Override
+        protected ImmutableValue<Double> constructImmutableValue(Double value) {
+            return constructValue(value).asImmutable();
+        }
+
+        @Override
+        protected boolean set(EntityPlayer container, Double value) {
+            container.capabilities.walkSpeed = value.floatValue();
+            container.sendPlayerAbilities();
+            return true;
+        }
+
+        @Override
+        protected Optional<Double> get(EntityPlayer container) {
+            return Optional.of(((double) container.capabilities.getWalkSpeed()));
+        }
+
     }
+
+    private static class FlySpeedProcessor extends KeyValueProcessor<EntityPlayer, Double, Value<Double>> {
+
+        @Override
+        protected boolean hasData(EntityPlayer entity) {
+            return true;
+        }
+
+        @Override
+        protected Value<Double> constructValue(Double value) {
+            return new SpongeValue<>(Keys.FLYING_SPEED, DataConstants.DEFAULT_FLYING_SPEED, value);
+        }
+
+        @Override
+        protected ImmutableValue<Double> constructImmutableValue(Double value) {
+            return constructValue(value).asImmutable();
+        }
+
+        @Override
+        protected boolean set(EntityPlayer container, Double value) {
+            container.capabilities.flySpeed = value.floatValue();
+            container.sendPlayerAbilities();
+            return true;
+        }
+
+        @Override
+        protected Optional<Double> get(EntityPlayer container) {
+            return Optional.of(((double) container.capabilities.getFlySpeed()));
+        }
+
+    }
+
 }

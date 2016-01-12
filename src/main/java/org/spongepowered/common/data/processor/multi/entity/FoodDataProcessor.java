@@ -26,53 +26,31 @@ package org.spongepowered.common.data.processor.multi.entity;
 
 import static org.spongepowered.common.data.util.DataUtil.getData;
 
-import com.google.common.collect.ImmutableMap;
 import net.minecraft.entity.player.EntityPlayer;
 import org.spongepowered.api.data.DataContainer;
-import org.spongepowered.api.data.DataHolder;
-import org.spongepowered.api.data.DataTransactionResult;
-import org.spongepowered.api.data.key.Key;
 import org.spongepowered.api.data.key.Keys;
 import org.spongepowered.api.data.manipulator.immutable.entity.ImmutableFoodData;
 import org.spongepowered.api.data.manipulator.mutable.entity.FoodData;
+import org.spongepowered.api.data.value.immutable.ImmutableValue;
+import org.spongepowered.api.data.value.mutable.MutableBoundedValue;
 import org.spongepowered.common.data.manipulator.mutable.entity.SpongeFoodData;
-import org.spongepowered.common.data.processor.common.AbstractEntityDataProcessor;
+import org.spongepowered.common.data.processor.common.AbstractSpongeDataProcessor;
+import org.spongepowered.common.data.util.DataConstants;
+import org.spongepowered.common.data.value.SpongeValueFactory;
 
-import java.util.Map;
 import java.util.Optional;
 
-public class FoodDataProcessor extends AbstractEntityDataProcessor<EntityPlayer, FoodData, ImmutableFoodData> {
+public class FoodDataProcessor extends AbstractSpongeDataProcessor<FoodData, ImmutableFoodData> {
 
     public FoodDataProcessor() {
-        super(EntityPlayer.class);
+        registerValueProcessor(Keys.FOOD_LEVEL, EntityPlayer.class, new FoodLevelProcessor());
+        registerValueProcessor(Keys.SATURATION, EntityPlayer.class, new SaturationProcessor());
+        registerValueProcessor(Keys.EXHAUSTION, EntityPlayer.class, new ExhaustionProcessor());
     }
 
     @Override
-    protected FoodData createManipulator() {
+    public FoodData createManipulator() {
         return new SpongeFoodData(20, 20, 0);
-    }
-
-    @Override
-    protected boolean doesDataExist(EntityPlayer entity) {
-        return true;
-    }
-
-    @Override
-    protected boolean set(EntityPlayer entity, Map<Key<?>, Object> keyValues) {
-        entity.getFoodStats().setFoodLevel((Integer) keyValues.get(Keys.FOOD_LEVEL));
-        entity.getFoodStats().foodSaturationLevel = ((Double) keyValues.get(Keys.SATURATION)).floatValue();
-        entity.getFoodStats().foodExhaustionLevel = ((Double) keyValues.get(Keys.EXHAUSTION)).floatValue();
-        return true;
-    }
-
-    @Override
-    protected Map<Key<?>, ?> getValues(EntityPlayer entity) {
-        final int food = entity.getFoodStats().getFoodLevel();
-        final double saturation = entity.getFoodStats().foodSaturationLevel;
-        final double exhaustion = entity.getFoodStats().foodExhaustionLevel;
-        return ImmutableMap.<Key<?>, Object>of(Keys.FOOD_LEVEL, food,
-                                               Keys.SATURATION, saturation,
-                                               Keys.EXHAUSTION, exhaustion);
     }
 
     @Override
@@ -83,9 +61,109 @@ public class FoodDataProcessor extends AbstractEntityDataProcessor<EntityPlayer,
         return Optional.of(foodData);
     }
 
-    @Override
-    public DataTransactionResult remove(DataHolder dataHolder) {
-        return DataTransactionResult.failNoData();
+    private static class FoodLevelProcessor extends KeyValueProcessor<EntityPlayer, Integer, MutableBoundedValue<Integer>> {
+
+        @Override
+        protected boolean hasData(EntityPlayer holder) {
+            return true;
+        }
+
+        @Override
+        protected MutableBoundedValue<Integer> constructValue(Integer defaultValue) {
+            return SpongeValueFactory.boundedBuilder(Keys.FOOD_LEVEL)
+                    .defaultValue(DataConstants.DEFAULT_FOOD_LEVEL)
+                    .minimum(0)
+                    .maximum(20)
+                    .actualValue(defaultValue)
+                    .build();
+        }
+
+        @Override
+        protected boolean set(EntityPlayer container, Integer value) {
+            container.getFoodStats().setFoodLevel(value);
+            return true;
+        }
+
+        @Override
+        protected Optional<Integer> get(EntityPlayer container) {
+            return Optional.of(container.getFoodStats().getFoodLevel());
+        }
+
+        @Override
+        protected ImmutableValue<Integer> constructImmutableValue(Integer value) {
+            return constructValue(value).asImmutable();
+        }
+
+    }
+
+    private static class SaturationProcessor extends KeyValueProcessor<EntityPlayer, Double, MutableBoundedValue<Double>> {
+
+        @Override
+        protected boolean hasData(EntityPlayer holder) {
+            return true;
+        }
+
+        @Override
+        protected MutableBoundedValue<Double> constructValue(Double defaultValue) {
+            return SpongeValueFactory.boundedBuilder(Keys.SATURATION)
+                    .defaultValue(DataConstants.DEFAULT_SATURATION)
+                    .minimum(0D)
+                    .maximum(5.0)
+                    .actualValue(defaultValue)
+                    .build();
+        }
+
+        @Override
+        protected boolean set(EntityPlayer container, Double value) {
+            container.getFoodStats().foodSaturationLevel = value.floatValue();
+            return true;
+        }
+
+        @Override
+        protected Optional<Double> get(EntityPlayer container) {
+            return Optional.of((double) container.getFoodStats().getSaturationLevel());
+        }
+
+        @Override
+        protected ImmutableValue<Double> constructImmutableValue(Double value) {
+            return constructValue(value).asImmutable();
+        }
+
+    }
+
+    private static class ExhaustionProcessor extends KeyValueProcessor<EntityPlayer, Double, MutableBoundedValue<Double>> {
+
+        @Override
+        protected boolean hasData(EntityPlayer holder) {
+            return true;
+        }
+
+        @Override
+        protected MutableBoundedValue<Double> constructValue(Double defaultValue) {
+            return SpongeValueFactory.boundedBuilder(Keys.EXHAUSTION)
+                    .defaultValue(DataConstants.DEFAULT_EXHAUSTION)
+                    .minimum(0D)
+                    .maximum(4.0)
+                    .actualValue(defaultValue)
+                    .build();
+        }
+
+        @Override
+        protected boolean set(EntityPlayer container, Double value) {
+            container.getFoodStats().foodExhaustionLevel = value.floatValue();
+            return true;
+        }
+
+        @Override
+        protected Optional<Double> get(EntityPlayer container) {
+            return Optional.of((double) container.getFoodStats().foodExhaustionLevel);
+        }
+
+        @Override
+        protected ImmutableValue<Double> constructImmutableValue(Double value) {
+            return constructValue(value).asImmutable();
+        }
+
     }
 
 }

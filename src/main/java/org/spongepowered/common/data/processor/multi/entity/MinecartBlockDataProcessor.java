@@ -24,63 +24,39 @@
  */
 package org.spongepowered.common.data.processor.multi.entity;
 
-import com.google.common.collect.ImmutableMap;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.entity.item.EntityMinecart;
+import net.minecraft.init.Blocks;
 import org.spongepowered.api.block.BlockState;
 import org.spongepowered.api.data.DataContainer;
-import org.spongepowered.api.data.DataHolder;
-import org.spongepowered.api.data.DataTransactionResult;
-import org.spongepowered.api.data.key.Key;
 import org.spongepowered.api.data.key.Keys;
 import org.spongepowered.api.data.manipulator.immutable.entity.ImmutableMinecartBlockData;
 import org.spongepowered.api.data.manipulator.mutable.entity.MinecartBlockData;
 import org.spongepowered.api.data.value.immutable.ImmutableValue;
+import org.spongepowered.api.data.value.mutable.Value;
 import org.spongepowered.common.data.manipulator.mutable.entity.SpongeMinecartBlockData;
-import org.spongepowered.common.data.processor.common.AbstractEntityDataProcessor;
+import org.spongepowered.common.data.processor.common.AbstractSpongeDataProcessor;
 import org.spongepowered.common.data.value.immutable.ImmutableSpongeValue;
+import org.spongepowered.common.data.value.mutable.SpongeValue;
 
-import java.util.Map;
 import java.util.Optional;
 
-public class MinecartBlockDataProcessor extends AbstractEntityDataProcessor<EntityMinecart, MinecartBlockData, ImmutableMinecartBlockData> {
+public class MinecartBlockDataProcessor extends AbstractSpongeDataProcessor<MinecartBlockData, ImmutableMinecartBlockData> {
 
     public MinecartBlockDataProcessor() {
-        super(EntityMinecart.class);
+        registerValueProcessor(Keys.REPRESENTED_BLOCK, EntityMinecart.class, new RepresentedBlockProcessor());
+        registerValueProcessor(Keys.OFFSET, EntityMinecart.class, new OffsetProcessor());
     }
 
     @Override
-    protected boolean doesDataExist(EntityMinecart entity) {
-        return entity.hasDisplayTile();
-    }
-
-    @Override
-    protected boolean set(EntityMinecart entity, Map<Key<?>, Object> keyValues) {
-        BlockState type = (BlockState) keyValues.get(Keys.REPRESENTED_BLOCK);
-        int offset = (Integer) keyValues.get(Keys.OFFSET);
-
-        entity.setDisplayTileOffset(offset);
-        entity.setDisplayTile((IBlockState) type);
-
-        return true;
-    }
-
-    @Override
-    protected Map<Key<?>, ?> getValues(EntityMinecart entity) {
-        BlockState state = (BlockState) entity.getDisplayTile();
-        int offset = entity.getDisplayTileOffset();
-        return ImmutableMap.of(Keys.REPRESENTED_BLOCK, state, Keys.OFFSET, offset);
-    }
-
-    @Override
-    protected MinecartBlockData createManipulator() {
+    public MinecartBlockData createManipulator() {
         return new SpongeMinecartBlockData();
     }
 
     @Override
     public Optional<MinecartBlockData> fill(DataContainer container, MinecartBlockData data) {
-        if(!container.contains(Keys.REPRESENTED_BLOCK.getQuery())
-            || !container.contains(Keys.OFFSET.getQuery())) {
+        if (!container.contains(Keys.REPRESENTED_BLOCK.getQuery())
+                || !container.contains(Keys.OFFSET.getQuery())) {
             return Optional.empty();
         }
 
@@ -93,19 +69,80 @@ public class MinecartBlockDataProcessor extends AbstractEntityDataProcessor<Enti
         return Optional.of(data);
     }
 
-    @Override
-    public DataTransactionResult remove(DataHolder dataHolder) {
-        if(dataHolder instanceof EntityMinecart) {
-            EntityMinecart cart = (EntityMinecart) dataHolder;
-            DataTransactionResult.Builder builder = DataTransactionResult.builder().result(DataTransactionResult.Type.SUCCESS);
-            if(cart.hasDisplayTile()) {
-                ImmutableValue<BlockState> block = new ImmutableSpongeValue<>(Keys.REPRESENTED_BLOCK, (BlockState) cart.getDisplayTile());
-                ImmutableValue<Integer> offset = new ImmutableSpongeValue<>(Keys.OFFSET, cart.getDisplayTileOffset());
-                cart.setHasDisplayTile(false);
-                builder.replace(block).replace(offset);
-            }
-            return builder.build();
+    private static class RepresentedBlockProcessor extends KeyValueProcessor<EntityMinecart, BlockState, Value<BlockState>> {
+
+        @Override
+        protected boolean hasData(EntityMinecart entity) {
+            return entity.hasDisplayTile();
         }
-        return DataTransactionResult.failNoData();
+
+        @Override
+        protected Value<BlockState> constructValue(BlockState value) {
+            return new SpongeValue<>(Keys.REPRESENTED_BLOCK, (BlockState) Blocks.AIR.getDefaultState(), value);
+        }
+
+        @Override
+        protected boolean set(EntityMinecart container, BlockState value) {
+            container.setDisplayTile((IBlockState) value);
+            return true;
+        }
+
+        @Override
+        protected Optional<BlockState> get(EntityMinecart container) {
+            if (!container.hasDisplayTile()) {
+                return Optional.empty();
+            }
+            return Optional.of((BlockState) container.getDisplayTile());
+        }
+
+        @Override
+        protected ImmutableValue<BlockState> constructImmutableValue(BlockState value) {
+            return new ImmutableSpongeValue<>(Keys.REPRESENTED_BLOCK, (BlockState) Blocks.AIR.getDefaultState(), value);
+        }
+
+        @Override
+        protected boolean remove(EntityMinecart cart) {
+            cart.setHasDisplayTile(false);
+            return true;
+        }
+    }
+
+    private static class OffsetProcessor extends KeyValueProcessor<EntityMinecart, Integer, Value<Integer>> {
+
+        @Override
+        protected boolean hasData(EntityMinecart entity) {
+            return entity.hasDisplayTile();
+        }
+
+        @Override
+        protected Value<Integer> constructValue(Integer value) {
+            return new SpongeValue<>(Keys.OFFSET, 6, value);
+        }
+
+        @Override
+        protected boolean set(EntityMinecart container, Integer value) {
+            if (!container.hasDisplayTile()) {
+                return false;
+            }
+            container.setDisplayTileOffset(value);
+            return true;
+        }
+
+        @Override
+        protected Optional<Integer> get(EntityMinecart container) {
+            return Optional.of(container.getDisplayTileOffset());
+        }
+
+        @Override
+        protected ImmutableValue<Integer> constructImmutableValue(Integer value) {
+            return new ImmutableSpongeValue<>(Keys.OFFSET, 6, value);
+        }
+
+        @Override
+        protected boolean remove(EntityMinecart cart) {
+            cart.setHasDisplayTile(false);
+            return true;
+        }
+
     }
 }

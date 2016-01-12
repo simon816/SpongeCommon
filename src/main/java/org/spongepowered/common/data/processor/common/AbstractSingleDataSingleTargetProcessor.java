@@ -38,28 +38,85 @@ import org.spongepowered.api.data.value.ValueContainer;
 import org.spongepowered.api.data.value.immutable.ImmutableValue;
 import org.spongepowered.api.data.value.mutable.Value;
 import org.spongepowered.common.SpongeImpl;
-import org.spongepowered.common.data.ValueProcessor;
 import org.spongepowered.common.data.util.DataUtil;
 
 import java.util.Optional;
 
 public abstract class AbstractSingleDataSingleTargetProcessor<Holder, T, V extends BaseValue<T>, M extends DataManipulator<M, I>, I extends ImmutableDataManipulator<I, M>>
-        extends AbstractSingleDataProcessor<T, V, M, I> implements ValueProcessor<T, V> {
+        extends AbstractSpongeDataProcessor<M, I> {
 
+    private class Processor extends AbstractSpongeDataProcessor.KeyValueProcessor<Holder, T, V> {
+
+        @Override
+        protected Optional<T> get(Holder holder) {
+            return AbstractSingleDataSingleTargetProcessor.this.getVal(holder);
+        }
+
+        @Override
+        protected boolean hasData(Holder holder) {
+            return AbstractSingleDataSingleTargetProcessor.this.hasData(holder);
+        }
+
+        @Override
+        public int getPriority() {
+            return AbstractSingleDataSingleTargetProcessor.this.getPriority();
+        }
+
+        @Override
+        protected boolean set(Holder holder, T value) {
+            return AbstractSingleDataSingleTargetProcessor.this.set(holder, value);
+        }
+
+        @Override
+        protected boolean remove(Holder holder) {
+            return AbstractSingleDataSingleTargetProcessor.this.remove(holder);
+        }
+
+        @Override
+        protected boolean supports(Holder holder) {
+            return AbstractSingleDataSingleTargetProcessor.this.supports(holder);
+        }
+
+        @Override
+        protected V constructValue(T value) {
+            return AbstractSingleDataSingleTargetProcessor.this.constructValue(value);
+        }
+
+        @Override
+        protected ImmutableValue<T> constructImmutableValue(T value) {
+            return AbstractSingleDataSingleTargetProcessor.this.constructImmutableValue(value);
+        }
+
+    }
+
+    protected final Key<V> key;
     protected final Class<Holder> holderClass;
 
     protected AbstractSingleDataSingleTargetProcessor(Key<V> key, Class<Holder> holderClass) {
-        super(key);
-        this.holderClass = checkNotNull(holderClass);
+        registerValueProcessor(this.key = checkNotNull(key), this.holderClass = checkNotNull(holderClass), new Processor());
     }
 
-    protected boolean supports(Holder dataHolder) {
+    // TODO Rename to get(Holder)
+    protected abstract Optional<T> getVal(Holder holder);
+
+    protected boolean hasData(Holder holder) {
+        return getVal(holder).isPresent();
+    }
+
+    protected abstract boolean set(Holder holder, T value);
+
+    protected boolean remove(Holder holder) {
+        return removeFrom((ValueContainer<?>) holder).isSuccessful();
+    }
+
+    // TODO This is backward compat
+    public abstract DataTransactionResult removeFrom(ValueContainer<?> container);
+
+    protected boolean supports(Holder holder) {
         return true;
     }
 
-    protected abstract boolean set(Holder dataHolder, T value);
-
-    protected abstract Optional<T> getVal(Holder dataHolder);
+    protected abstract V constructValue(T value);
 
     protected abstract ImmutableValue<T> constructImmutableValue(T value);
 
@@ -67,6 +124,16 @@ public abstract class AbstractSingleDataSingleTargetProcessor<Holder, T, V exten
     @Override
     public boolean supports(DataHolder dataHolder) {
         return this.holderClass.isInstance(dataHolder) && supports((Holder) dataHolder);
+    }
+
+    // TODO TEMP
+    public boolean supports(ValueContainer<?> container) {
+        return this.holderClass.isInstance(container) && supports((Holder) container);
+    }
+
+    @SuppressWarnings("unchecked")
+    private boolean supportsObj(Object object) {
+        return this.holderClass.isInstance(object) && supports((Holder) object);
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -134,51 +201,11 @@ public abstract class AbstractSingleDataSingleTargetProcessor<Holder, T, V exten
         return Optional.empty();
     }
 
-    @Override
-    public final Key<V> getKey() {
-        return this.key;
-    }
-
-    /**
-     * Builds a {@link Value} of the type produced by this processor from an
-     * input, actual value.
-     *
-     * @param actualValue The actual value
-     * @return The constructed {@link Value}
-     */
-    protected abstract V constructValue(T actualValue);
-
     @SuppressWarnings("unchecked")
-    @Override
-    public final boolean supports(ValueContainer<?> container) {
-        return this.holderClass.isInstance(container) && supports((Holder) container);
-    }
-
-    @SuppressWarnings("unchecked")
-    @Override
-    public final Optional<T> getValueFromContainer(ValueContainer<?> container) {
-        if (!supports(container)) {
-            return Optional.empty();
-        } else {
-            return getVal((Holder) container);
-        }
-    }
-
-    @Override
-    public Optional<V> getApiValueFromContainer(ValueContainer<?> container) {
-        final Optional<T> optionalValue = getValueFromContainer(container);
-        if(optionalValue.isPresent()) {
-            return Optional.of(constructValue(optionalValue.get()));
-        } else {
-            return Optional.empty();
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    @Override
+    // TODO @Override
     public DataTransactionResult offerToStore(ValueContainer<?> container, T value) {
         final ImmutableValue<T> newValue = constructImmutableValue(value);
-        if (supports(container)) {
+        if (supportsObj(container)) {
             final DataTransactionResult.Builder builder = DataTransactionResult.builder();
             final Optional<T> oldVal = getVal((Holder) container);
             try {

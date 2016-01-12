@@ -64,6 +64,7 @@ import org.spongepowered.common.data.nbt.validation.ValidationType;
 import org.spongepowered.common.data.nbt.value.NbtValueProcessor;
 import org.spongepowered.common.data.persistence.DataTranslatorTypeSerializer;
 import org.spongepowered.common.data.processor.common.AbstractSingleDataSingleTargetProcessor;
+import org.spongepowered.common.data.processor.common.AbstractSpongeDataProcessor;
 import org.spongepowered.common.data.util.ComparatorUtil;
 import org.spongepowered.common.data.util.DataFunction;
 import org.spongepowered.common.data.util.DataProcessorDelegate;
@@ -410,6 +411,9 @@ public final class SpongeDataManager implements DataManager {
         }
         checkArgument(!immutableProcessorList.contains(processor), "Duplicate DataProcessor Registration!");
         immutableProcessorList.add(processor);
+        if (processor instanceof AbstractSpongeDataProcessor) {
+            ((AbstractSpongeDataProcessor<T, I>) processor).registerValueProcessors(this);
+        }
     }
 
     public <E, V extends BaseValue<E>, T extends DataManipulator<T, I>, I extends ImmutableDataManipulator<I, T>> void

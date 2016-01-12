@@ -24,55 +24,28 @@
  */
 package org.spongepowered.common.data.processor.multi.item;
 
-import com.google.common.collect.ImmutableMap;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import org.spongepowered.api.data.DataContainer;
-import org.spongepowered.api.data.DataHolder;
-import org.spongepowered.api.data.DataTransactionResult;
-import org.spongepowered.api.data.key.Key;
 import org.spongepowered.api.data.key.Keys;
 import org.spongepowered.api.data.manipulator.immutable.item.ImmutableDurabilityData;
 import org.spongepowered.api.data.manipulator.mutable.item.DurabilityData;
+import org.spongepowered.api.data.value.immutable.ImmutableValue;
+import org.spongepowered.api.data.value.mutable.MutableBoundedValue;
+import org.spongepowered.api.data.value.mutable.Value;
 import org.spongepowered.common.data.manipulator.mutable.item.SpongeDurabilityData;
 import org.spongepowered.common.data.processor.common.AbstractItemDataProcessor;
 import org.spongepowered.common.data.util.NbtDataUtil;
+import org.spongepowered.common.data.value.SpongeValueFactory;
 
-import java.util.Map;
 import java.util.Optional;
 
 public class DurabilityDataProcessor extends AbstractItemDataProcessor<DurabilityData, ImmutableDurabilityData> {
 
     public DurabilityDataProcessor() {
         super(input -> input.getItem().isDamageable());
-    }
-
-    @Override
-    public boolean doesDataExist(ItemStack itemStack) {
-        return itemStack.getItem().isDamageable();
-    }
-
-    @Override
-    public boolean set(ItemStack itemStack, Map<Key<?>, Object> keyValues) {
-        itemStack.setItemDamage(itemStack.getMaxDamage() - (int) keyValues.get(Keys.ITEM_DURABILITY));
-        final boolean unbreakable = (boolean) keyValues.get(Keys.UNBREAKABLE);
-        if (unbreakable) {
-            itemStack.setItemDamage(0);
-        }
-        if (!itemStack.hasTagCompound()) {
-            itemStack.setTagCompound(new NBTTagCompound());
-        }
-        itemStack.getTagCompound().setBoolean(NbtDataUtil.ITEM_UNBREAKABLE, unbreakable);
-        return true;
-    }
-
-    @Override
-    public Map<Key<?>, ?> getValues(ItemStack itemStack) {
-        if (itemStack.hasTagCompound() && itemStack.getTagCompound().hasKey(NbtDataUtil.ITEM_UNBREAKABLE)) {
-            return ImmutableMap.of(Keys.ITEM_DURABILITY, itemStack.getMaxDamage() - itemStack.getItemDamage(),
-                    Keys.UNBREAKABLE, itemStack.getTagCompound().getBoolean(NbtDataUtil.ITEM_UNBREAKABLE));
-        }
-        return ImmutableMap.of(Keys.ITEM_DURABILITY, itemStack.getMaxDamage() - itemStack.getItemDamage(), Keys.UNBREAKABLE, false);
+        registerValueProcessor(Keys.ITEM_DURABILITY, ItemStack.class, new DurabilityProcessor());
+        registerValueProcessor(Keys.UNBREAKABLE, ItemStack.class, new UnbreakableProcessor());
     }
 
     @Override
@@ -92,8 +65,85 @@ public class DurabilityDataProcessor extends AbstractItemDataProcessor<Durabilit
         return Optional.empty();
     }
 
-    @Override
-    public DataTransactionResult remove(DataHolder dataHolder) {
-        return DataTransactionResult.failNoData();
+    private static class DurabilityProcessor extends KeyValueProcessor<ItemStack, Integer, MutableBoundedValue<Integer>> {
+
+        @Override
+        protected boolean hasData(ItemStack itemStack) {
+            return itemStack.getItem().isDamageable();
+        }
+
+        @Override
+        protected MutableBoundedValue<Integer> constructValue(Integer defaultValue) {
+            return SpongeValueFactory.boundedBuilder(Keys.ITEM_DURABILITY)
+                    .minimum(0)
+                    .maximum(Integer.MAX_VALUE)
+                    .defaultValue(60)
+                    .actualValue(defaultValue)
+                    .build();
+        }
+
+        @Override
+        protected boolean set(ItemStack container, Integer value) {
+            container.setItemDamage(container.getMaxDamage() - value);
+            return true;
+        }
+
+        @Override
+        protected Optional<Integer> get(ItemStack container) {
+            if (container.getItem().isDamageable()) {
+                return Optional.of(container.getMaxDamage() - container.getItemDamage());
+            }
+            return Optional.empty();
+        }
+
+        @Override
+        protected ImmutableValue<Integer> constructImmutableValue(Integer value) {
+            return constructValue(value).asImmutable();
+        }
+
+    }
+
+    private static class UnbreakableProcessor extends KeyValueProcessor<ItemStack, Boolean, Value<Boolean>> {
+
+        @Override
+        protected boolean hasData(ItemStack itemStack) {
+            return itemStack.getItem().isDamageable();
+        }
+
+        @Override
+        protected boolean supports(ItemStack container) {
+            return container.getItem().isDamageable();
+        }
+
+        @Override
+        protected Value<Boolean> constructValue(Boolean defaultValue) {
+            return SpongeValueFactory.getInstance().createValue(Keys.UNBREAKABLE, defaultValue, false);
+        }
+
+        @Override
+        protected boolean set(ItemStack container, Boolean value) {
+            if (value) {
+                container.setItemDamage(0);
+            }
+            if (!container.hasTagCompound()) {
+                container.setTagCompound(new NBTTagCompound());
+            }
+            container.getTagCompound().setBoolean(NbtDataUtil.ITEM_UNBREAKABLE, value);
+            return true;
+        }
+
+        @Override
+        protected Optional<Boolean> get(ItemStack container) {
+            if (container.hasTagCompound() && container.getTagCompound().hasKey(NbtDataUtil.ITEM_UNBREAKABLE)) {
+                return Optional.of(container.getTagCompound().getBoolean(NbtDataUtil.ITEM_UNBREAKABLE));
+            }
+            return Optional.of(false);
+        }
+
+        @Override
+        protected ImmutableValue<Boolean> constructImmutableValue(Boolean value) {
+            return constructValue(value).asImmutable();
+        }
+
     }
 }

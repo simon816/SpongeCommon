@@ -24,70 +24,45 @@
  */
 package org.spongepowered.common.data.processor.multi.entity;
 
-import com.google.common.collect.ImmutableMap;
 import net.minecraft.entity.passive.EntityHorse;
-import org.spongepowered.api.GameRegistry;
 import org.spongepowered.api.data.DataContainer;
-import org.spongepowered.api.data.DataHolder;
-import org.spongepowered.api.data.DataTransactionResult;
-import org.spongepowered.api.data.key.Key;
 import org.spongepowered.api.data.key.Keys;
 import org.spongepowered.api.data.manipulator.immutable.entity.ImmutableHorseData;
 import org.spongepowered.api.data.manipulator.mutable.entity.HorseData;
-import org.spongepowered.common.SpongeImpl;
+import org.spongepowered.api.data.type.HorseColor;
+import org.spongepowered.api.data.type.HorseColors;
+import org.spongepowered.api.data.type.HorseStyle;
+import org.spongepowered.api.data.type.HorseStyles;
+import org.spongepowered.api.data.type.HorseVariant;
+import org.spongepowered.api.data.type.HorseVariants;
+import org.spongepowered.api.data.value.immutable.ImmutableValue;
+import org.spongepowered.api.data.value.mutable.Value;
 import org.spongepowered.common.data.manipulator.mutable.entity.SpongeHorseData;
-import org.spongepowered.common.data.processor.common.AbstractEntityDataProcessor;
+import org.spongepowered.common.data.processor.common.AbstractSpongeDataProcessor;
 import org.spongepowered.common.data.processor.common.HorseUtils;
+import org.spongepowered.common.data.value.immutable.ImmutableSpongeValue;
+import org.spongepowered.common.data.value.mutable.SpongeValue;
 import org.spongepowered.common.entity.SpongeHorseColor;
 import org.spongepowered.common.entity.SpongeHorseStyle;
 import org.spongepowered.common.entity.SpongeHorseVariant;
 
-import java.util.Map;
 import java.util.Optional;
 
-public class HorseDataProcessor extends AbstractEntityDataProcessor<EntityHorse, HorseData, ImmutableHorseData> {
+public class HorseDataProcessor extends AbstractSpongeDataProcessor<HorseData, ImmutableHorseData> {
 
     public HorseDataProcessor() {
-        super(EntityHorse.class);
+        registerValueProcessor(Keys.HORSE_COLOR, EntityHorse.class, new ColorProcessor());
+        registerValueProcessor(Keys.HORSE_STYLE, EntityHorse.class, new StyleProcessor());
+        registerValueProcessor(Keys.HORSE_VARIANT, EntityHorse.class, new VariantProcessor());
     }
 
     @Override
-    protected HorseData createManipulator() {
+    public HorseData createManipulator() {
         return new SpongeHorseData();
     }
 
     @Override
-    protected boolean doesDataExist(EntityHorse entity) {
-        return true;
-    }
-
-    @Override
-    protected boolean set(EntityHorse entity, Map<Key<?>, Object> keyValues) {
-        SpongeHorseColor horseColor = (SpongeHorseColor) keyValues.get(Keys.HORSE_COLOR);
-        SpongeHorseStyle horseStyle = (SpongeHorseStyle) keyValues.get(Keys.HORSE_STYLE);
-        SpongeHorseVariant horseVariant = (SpongeHorseVariant) keyValues.get(Keys.HORSE_VARIANT);
-
-        int variant = HorseUtils.getInternalVariant(horseColor, horseStyle);
-
-        entity.setType(horseVariant.getType());
-        entity.setHorseVariant(variant);
-
-        return true;
-    }
-
-    @Override
-    protected Map<Key<?>, ?> getValues(EntityHorse entity) {
-        return ImmutableMap.<Key<?>, Object>of(
-                Keys.HORSE_COLOR, HorseUtils.getHorseColor(entity),
-                Keys.HORSE_STYLE, HorseUtils.getHorseStyle(entity),
-                Keys.HORSE_VARIANT, HorseUtils.getHorseVariant(entity.getType())
-        );
-    }
-
-    @Override
     public Optional<HorseData> fill(DataContainer container, HorseData horseData) {
-        GameRegistry registry = SpongeImpl.getRegistry();
-
         horseData.set(Keys.HORSE_COLOR, HorseUtils.getHorseColor(container));
         horseData.set(Keys.HORSE_STYLE, HorseUtils.getHorseStyle(container));
         horseData.set(Keys.HORSE_VARIANT, HorseUtils.getHorseVariant(container));
@@ -95,8 +70,92 @@ public class HorseDataProcessor extends AbstractEntityDataProcessor<EntityHorse,
         return Optional.of(horseData);
     }
 
-    @Override
-    public DataTransactionResult remove(DataHolder dataHolder) {
-        return DataTransactionResult.failNoData();
+    private static class ColorProcessor extends KeyValueProcessor<EntityHorse, HorseColor, Value<HorseColor>> {
+
+        @Override
+        protected boolean hasData(EntityHorse holder) {
+            return true;
+        }
+
+        @Override
+        protected Value<HorseColor> constructValue(HorseColor defaultValue) {
+            return new SpongeValue<>(Keys.HORSE_COLOR, defaultValue);
+        }
+
+        @Override
+        protected boolean set(EntityHorse container, HorseColor value) {
+            final SpongeHorseStyle style = (SpongeHorseStyle) HorseUtils.getHorseStyle(container);
+            container.setHorseVariant(HorseUtils.getInternalVariant((SpongeHorseColor) value, style));
+            return true;
+        }
+
+        @Override
+        protected Optional<HorseColor> get(EntityHorse container) {
+            return Optional.of(HorseUtils.getHorseColor(container));
+        }
+
+        @Override
+        protected ImmutableValue<HorseColor> constructImmutableValue(HorseColor value) {
+            return ImmutableSpongeValue.cachedOf(Keys.HORSE_COLOR, HorseColors.WHITE, value);
+        }
+    }
+
+    private static class StyleProcessor extends KeyValueProcessor<EntityHorse, HorseStyle, Value<HorseStyle>> {
+
+        @Override
+        protected boolean hasData(EntityHorse holder) {
+            return true;
+        }
+
+        @Override
+        protected Value<HorseStyle> constructValue(HorseStyle defaultValue) {
+            return new SpongeValue<>(Keys.HORSE_STYLE, defaultValue);
+        }
+
+        @Override
+        protected boolean set(EntityHorse container, HorseStyle value) {
+            SpongeHorseColor color = (SpongeHorseColor) HorseUtils.getHorseColor(container);
+            container.setHorseVariant(HorseUtils.getInternalVariant(color, (SpongeHorseStyle) value));
+            return true;
+        }
+
+        @Override
+        protected Optional<HorseStyle> get(EntityHorse container) {
+            return Optional.of(HorseUtils.getHorseStyle(container));
+        }
+
+        @Override
+        protected ImmutableValue<HorseStyle> constructImmutableValue(HorseStyle value) {
+            return ImmutableSpongeValue.cachedOf(Keys.HORSE_STYLE, HorseStyles.NONE, value);
+        }
+    }
+
+    private static class VariantProcessor extends KeyValueProcessor<EntityHorse, HorseVariant, Value<HorseVariant>> {
+
+        @Override
+        protected boolean hasData(EntityHorse holder) {
+            return true;
+        }
+
+        @Override
+        protected Value<HorseVariant> constructValue(HorseVariant defaultValue) {
+            return new SpongeValue<>(Keys.HORSE_VARIANT, defaultValue);
+        }
+
+        @Override
+        protected boolean set(EntityHorse container, HorseVariant value) {
+            container.setType(((SpongeHorseVariant) value).getType());
+            return true;
+        }
+
+        @Override
+        protected Optional<HorseVariant> get(EntityHorse container) {
+            return Optional.of(HorseUtils.getHorseVariant(container.getType()));
+        }
+
+        @Override
+        protected ImmutableValue<HorseVariant> constructImmutableValue(HorseVariant value) {
+            return ImmutableSpongeValue.cachedOf(Keys.HORSE_VARIANT, HorseVariants.HORSE, value);
+        }
     }
 }

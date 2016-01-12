@@ -24,59 +24,38 @@
  */
 package org.spongepowered.common.data.processor.multi.tileentity;
 
-import com.google.common.collect.ImmutableMap;
 import net.minecraft.tileentity.TileEntityBanner;
 import org.spongepowered.api.Sponge;
 import org.spongepowered.api.data.DataContainer;
-import org.spongepowered.api.data.DataHolder;
-import org.spongepowered.api.data.DataTransactionResult;
-import org.spongepowered.api.data.key.Key;
 import org.spongepowered.api.data.key.Keys;
 import org.spongepowered.api.data.manipulator.immutable.tileentity.ImmutableBannerData;
 import org.spongepowered.api.data.manipulator.mutable.tileentity.BannerData;
 import org.spongepowered.api.data.meta.PatternLayer;
 import org.spongepowered.api.data.type.DyeColor;
+import org.spongepowered.api.data.value.immutable.ImmutableValue;
+import org.spongepowered.api.data.value.mutable.PatternListValue;
+import org.spongepowered.api.data.value.mutable.Value;
 import org.spongepowered.common.data.manipulator.mutable.tileentity.SpongeBannerData;
-import org.spongepowered.common.data.processor.common.AbstractTileEntityDataProcessor;
+import org.spongepowered.common.data.processor.common.AbstractSpongeDataProcessor;
+import org.spongepowered.common.data.util.DataConstants;
+import org.spongepowered.common.data.value.immutable.ImmutableSpongePatternListValue;
+import org.spongepowered.common.data.value.immutable.ImmutableSpongeValue;
+import org.spongepowered.common.data.value.mutable.SpongePatternListValue;
+import org.spongepowered.common.data.value.mutable.SpongeValue;
 import org.spongepowered.common.interfaces.block.tile.IMixinBanner;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
-public class TileEntityBannerDataProcessor extends AbstractTileEntityDataProcessor<TileEntityBanner, BannerData, ImmutableBannerData> {
+public class TileEntityBannerDataProcessor extends AbstractSpongeDataProcessor<BannerData, ImmutableBannerData> {
 
     public TileEntityBannerDataProcessor() {
-        super(TileEntityBanner.class);
+        registerValueProcessor(Keys.BANNER_PATTERNS, TileEntityBanner.class, new PatternsProcessor());
+        registerValueProcessor(Keys.BANNER_BASE_COLOR, TileEntityBanner.class, new BaseColorProcessor());
     }
 
     @Override
-    protected boolean doesDataExist(TileEntityBanner entity) {
-        return true;
-    }
-
-    @SuppressWarnings("unchecked")
-    @Override
-    protected boolean set(TileEntityBanner entity, Map<Key<?>, Object> keyValues) {
-        if (!entity.getWorld().isRemote) {
-            List<PatternLayer> layers = (List<PatternLayer>) keyValues.get(Keys.BANNER_PATTERNS);
-            DyeColor baseColor = (DyeColor) keyValues.get(Keys.BANNER_BASE_COLOR);
-            ((IMixinBanner) entity).setLayers(layers);
-            ((IMixinBanner) entity).setBaseColor(baseColor);
-            return true;
-        }
-        return false;
-    }
-
-    @Override
-    protected Map<Key<?>, ?> getValues(TileEntityBanner entity) {
-        List<PatternLayer> layers = ((IMixinBanner) entity).getLayers();
-        DyeColor color = ((IMixinBanner) entity).getBaseColor();
-        return ImmutableMap.of(Keys.BANNER_BASE_COLOR, color, Keys.BANNER_PATTERNS, layers);
-    }
-
-    @Override
-    protected BannerData createManipulator() {
+    public BannerData createManipulator() {
         return new SpongeBannerData();
     }
 
@@ -93,8 +72,70 @@ public class TileEntityBannerDataProcessor extends AbstractTileEntityDataProcess
         return Optional.empty();
     }
 
-    @Override
-    public DataTransactionResult remove(DataHolder dataHolder) {
-        return DataTransactionResult.failNoData();
+    private static class PatternsProcessor extends KeyValueProcessor<TileEntityBanner, List<PatternLayer>, PatternListValue> {
+
+        @Override
+        protected boolean hasData(TileEntityBanner holder) {
+            return true;
+        }
+
+        @Override
+        protected PatternListValue constructValue(List<PatternLayer> actualValue) {
+            return new SpongePatternListValue(Keys.BANNER_PATTERNS, actualValue);
+        }
+
+        @Override
+        protected boolean set(TileEntityBanner container, List<PatternLayer> value) {
+            if (!container.getWorld().isRemote) { // This avoids a client crash
+                                                  // because clientside.
+                ((IMixinBanner) container).setLayers(value);
+                return true;
+            }
+            return false;
+        }
+
+        @Override
+        protected Optional<List<PatternLayer>> get(TileEntityBanner container) {
+            return Optional.of(((IMixinBanner) container).getLayers());
+        }
+
+        @Override
+        protected ImmutableValue<List<PatternLayer>> constructImmutableValue(List<PatternLayer> value) {
+            return new ImmutableSpongePatternListValue(Keys.BANNER_PATTERNS, value);
+        }
+
+    }
+
+    private static class BaseColorProcessor extends KeyValueProcessor<TileEntityBanner, DyeColor, Value<DyeColor>> {
+
+        @Override
+        protected boolean hasData(TileEntityBanner holder) {
+            return true;
+        }
+
+        @Override
+        protected Value<DyeColor> constructValue(DyeColor actualValue) {
+            return new SpongeValue<>(Keys.BANNER_BASE_COLOR, DataConstants.Catalog.DEFAULT_BANNER_BASE, actualValue);
+        }
+
+        @Override
+        protected boolean set(TileEntityBanner container, DyeColor value) {
+            if (!container.getWorld().isRemote) {
+                ((IMixinBanner) container).setBaseColor(value);
+                return true;
+            }
+            return false;
+        }
+
+        @Override
+        protected Optional<DyeColor> get(TileEntityBanner container) {
+            return Optional.of(((IMixinBanner) container).getBaseColor());
+        }
+
+        @Override
+        protected ImmutableValue<DyeColor> constructImmutableValue(DyeColor value) {
+            return ImmutableSpongeValue.cachedOf(Keys.BANNER_BASE_COLOR, DataConstants.Catalog.DEFAULT_BANNER_BASE, value);
+        }
+
     }
 }

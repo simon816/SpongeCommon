@@ -24,59 +24,36 @@
  */
 package org.spongepowered.common.data.processor.multi.entity;
 
+import static org.spongepowered.common.data.util.ComparatorUtil.doubleComparator;
 import static org.spongepowered.common.data.util.DataUtil.getData;
 
-import com.google.common.collect.ImmutableMap;
 import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.entity.SharedMonsterAttributes;
 import net.minecraft.util.DamageSource;
 import org.spongepowered.api.data.DataContainer;
-import org.spongepowered.api.data.DataHolder;
 import org.spongepowered.api.data.DataTransactionResult;
-import org.spongepowered.api.data.key.Key;
 import org.spongepowered.api.data.key.Keys;
 import org.spongepowered.api.data.manipulator.immutable.entity.ImmutableHealthData;
 import org.spongepowered.api.data.manipulator.mutable.entity.HealthData;
+import org.spongepowered.api.data.value.immutable.ImmutableBoundedValue;
+import org.spongepowered.api.data.value.mutable.MutableBoundedValue;
 import org.spongepowered.common.data.manipulator.mutable.entity.SpongeHealthData;
-import org.spongepowered.common.data.processor.common.AbstractEntityDataProcessor;
+import org.spongepowered.common.data.processor.common.AbstractSpongeDataProcessor;
+import org.spongepowered.common.data.value.SpongeValueFactory;
 import org.spongepowered.common.registry.type.event.DamageSourceRegistryModule;
 
-import java.util.Map;
 import java.util.Optional;
 
-public class HealthDataProcessor extends AbstractEntityDataProcessor<EntityLivingBase, HealthData, ImmutableHealthData> {
+public class HealthDataProcessor extends AbstractSpongeDataProcessor<HealthData, ImmutableHealthData> {
 
     public HealthDataProcessor() {
-        super(EntityLivingBase.class);
+        registerValueProcessor(Keys.MAX_HEALTH, EntityLivingBase.class, new MaxHealthProcessor());
+        registerValueProcessor(Keys.HEALTH, EntityLivingBase.class, new HealthProcessor());
     }
 
     @Override
-    protected HealthData createManipulator() {
+    public HealthData createManipulator() {
         return new SpongeHealthData(20, 20);
-    }
-
-    @Override
-    protected boolean doesDataExist(EntityLivingBase entity) {
-        return true;
-    }
-
-    @Override
-    protected boolean set(EntityLivingBase entity, Map<Key<?>, Object> keyValues) {
-        entity.getEntityAttribute(SharedMonsterAttributes.MAX_HEALTH).setBaseValue(((Double) keyValues.get(Keys.MAX_HEALTH)).floatValue());
-        float health = ((Double) keyValues.get(Keys.HEALTH)).floatValue();
-        entity.setHealth(health);
-        if (health == 0) {
-            entity.attackEntityFrom(DamageSourceRegistryModule.IGNORED_DAMAGE_SOURCE, 10000F);
-        }
-        return true;
-    }
-
-    @Override
-    protected Map<Key<?>, ?> getValues(EntityLivingBase entity) {
-        final double health = entity.getHealth();
-        final double maxHealth = entity.getMaxHealth();
-        return ImmutableMap.<Key<?>, Object>of(Keys.HEALTH, health,
-                                               Keys.MAX_HEALTH, maxHealth);
     }
 
     @Override
@@ -89,9 +66,115 @@ public class HealthDataProcessor extends AbstractEntityDataProcessor<EntityLivin
         return Optional.of(healthData);
     }
 
-    @Override
-    public DataTransactionResult remove(DataHolder dataHolder) {
-        return DataTransactionResult.builder().result(DataTransactionResult.Type.FAILURE).build();
+    private static class MaxHealthProcessor extends KeyValueProcessor<EntityLivingBase, Double, MutableBoundedValue<Double>> {
+
+        @Override
+        protected boolean hasData(EntityLivingBase holder) {
+            return true;
+        }
+
+        @Override
+        protected MutableBoundedValue<Double> constructValue(Double defaultValue) {
+            return SpongeValueFactory.boundedBuilder(Keys.MAX_HEALTH)
+                    .defaultValue(20D)
+                    .minimum(1D)
+                    .maximum(((Float) Float.MAX_VALUE).doubleValue())
+                    .actualValue(defaultValue)
+                    .build();
+        }
+
+        @Override
+        protected boolean set(EntityLivingBase container, Double value) {
+            container.getEntityAttribute(SharedMonsterAttributes.MAX_HEALTH).setBaseValue((value).floatValue());
+            return true;
+        }
+
+        @Override
+        protected Optional<Double> get(EntityLivingBase container) {
+            return Optional.of((double) container.getMaxHealth());
+        }
+
+        @Override
+        protected ImmutableBoundedValue<Double> constructImmutableValue(Double value) {
+            return constructValue(value).asImmutable();
+        }
+
+    }
+
+    private static class HealthProcessor extends KeyValueProcessor<EntityLivingBase, Double, MutableBoundedValue<Double>> {
+
+        @Override
+        protected boolean hasData(EntityLivingBase holder) {
+            return true;
+        }
+
+        @Override
+        protected Optional<MutableBoundedValue<Double>> constructValueForHolder(EntityLivingBase entity) {
+            final double maxHealth = ((EntityLivingBase) entity).getMaxHealth();
+            return Optional.of(SpongeValueFactory.boundedBuilder(Keys.HEALTH)
+                    .comparator(doubleComparator())
+                    .minimum(0D)
+                    .maximum(maxHealth)
+                    .defaultValue(maxHealth)
+                    .actualValue((double) ((EntityLivingBase) entity).getHealth())
+                    .build());
+        }
+
+        @Override
+        protected MutableBoundedValue<Double> constructValue(Double value) {
+            return SpongeValueFactory.boundedBuilder(Keys.HEALTH)
+                    .comparator(doubleComparator())
+                    .minimum(0D)
+                    .maximum(((Float) Float.MAX_VALUE).doubleValue())
+                    .defaultValue(20D)
+                    .actualValue(value)
+                    .build();
+        }
+
+        @Override
+        protected boolean set(EntityLivingBase entity, Double health) {
+            entity.setHealth(health.floatValue());
+            if (health == 0) {
+                entity.attackEntityFrom(DamageSourceRegistryModule.IGNORED_DAMAGE_SOURCE, 10000F);
+            }
+            return true;
+        }
+        protected DataTransactionResult set2(EntityLivingBase entity, Double value) {
+            final DataTransactionResult.Builder builder = DataTransactionResult.builder();
+            final double maxHealth = entity.getMaxHealth();
+            final ImmutableBoundedValue<Double> newHealthValue = SpongeValueFactory.boundedBuilder(Keys.HEALTH)
+                    .defaultValue(maxHealth)
+                    .minimum(0D)
+                    .maximum(maxHealth)
+                    .actualValue(value)
+                    .build()
+                    .asImmutable();
+            final ImmutableBoundedValue<Double> oldHealthValue = constructValueForHolder(entity).get().asImmutable();
+            if (value > maxHealth) {
+                return DataTransactionResult.errorResult(newHealthValue);
+            }
+            try {
+                entity.setHealth(value.floatValue());
+            } catch (Exception e) {
+                return DataTransactionResult.errorResult(newHealthValue);
+            }
+            if (value.floatValue() <= 0.0F) {
+                entity.onDeath(DamageSource.generic);
+            }
+            return builder.success(newHealthValue).replace(oldHealthValue).result(DataTransactionResult.Type.SUCCESS).build();
+        }
+
+
+        @Override
+        protected Optional<Double> get(EntityLivingBase container) {
+            return Optional.of((double) container.getHealth());
+        }
+
+        @Override
+        protected ImmutableBoundedValue<Double> constructImmutableValue(Double value) {
+            return constructValue(value).asImmutable();
+        }
+
     }
 
 }

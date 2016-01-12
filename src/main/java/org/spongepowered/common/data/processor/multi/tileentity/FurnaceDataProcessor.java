@@ -24,98 +24,56 @@
  */
 package org.spongepowered.common.data.processor.multi.tileentity;
 
-import com.google.common.collect.Maps;
 import net.minecraft.tileentity.TileEntityFurnace;
 import org.spongepowered.api.block.BlockTypes;
 import org.spongepowered.api.data.DataContainer;
-import org.spongepowered.api.data.DataHolder;
-import org.spongepowered.api.data.DataTransactionResult;
-import org.spongepowered.api.data.key.Key;
 import org.spongepowered.api.data.key.Keys;
 import org.spongepowered.api.data.manipulator.immutable.tileentity.ImmutableFurnaceData;
 import org.spongepowered.api.data.manipulator.mutable.tileentity.FurnaceData;
+import org.spongepowered.api.data.value.immutable.ImmutableValue;
+import org.spongepowered.api.data.value.mutable.MutableBoundedValue;
 import org.spongepowered.api.event.cause.Cause;
 import org.spongepowered.api.world.World;
 import org.spongepowered.common.SpongeImpl;
 import org.spongepowered.common.data.manipulator.mutable.tileentity.SpongeFurnaceData;
-import org.spongepowered.common.data.processor.common.AbstractTileEntityDataProcessor;
+import org.spongepowered.common.data.processor.common.AbstractSpongeDataProcessor;
 import org.spongepowered.common.data.util.ImplementationRequiredForTest;
+import org.spongepowered.common.data.value.SpongeValueFactory;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Optional;
 
 @ImplementationRequiredForTest
-public class FurnaceDataProcessor extends AbstractTileEntityDataProcessor<TileEntityFurnace, FurnaceData, ImmutableFurnaceData> {
+public class FurnaceDataProcessor extends AbstractSpongeDataProcessor<FurnaceData, ImmutableFurnaceData> {
+
 
     public FurnaceDataProcessor() {
-        super(TileEntityFurnace.class);
+        // time (int) the fuel item already burned
+        registerValueProcessor(Keys.PASSED_BURN_TIME, TileEntityFurnace.class, new BurnTimeProcessor());
+        // time (int) the fuel can burn until its depleted
+        registerValueProcessor(Keys.MAX_BURN_TIME, TileEntityFurnace.class, new MaxBurnTimeProcessor());
+        // time (int) the item already cooked
+        registerValueProcessor(Keys.PASSED_COOK_TIME, TileEntityFurnace.class, new CookTimeProcessor());
+        // time (int) the item have to cook
+        registerValueProcessor(Keys.MAX_COOK_TIME, TileEntityFurnace.class, new MaxCookTimeProcessor());
     }
 
-    private Cause cause;
-
-    @Override
-    protected boolean doesDataExist(TileEntityFurnace tileEntity) {
-        return true; //if it's an TileEntityFurnace it always has the data
-    }
-
-    @Override
-    protected boolean set(TileEntityFurnace tileEntity, Map<Key<?>, Object> keyValues) {
-        // getField() / setField()
-        //
-        // 0 : furnaceBurnTime -> NOT equal to passedBurnTime --> the remaining burn time
-        // 1 : currentItemBurnTime -> equal to maxBurnTime
-        // 2 : cookTime -> equal to passedCookTime
-        // 3 : totalCookTime -> equal to maxCookTime
-        if (this.cause == null) { // lazy evaluation because of tests
-            this.cause = Cause.source(SpongeImpl.getPlugin()).build();
+    private static Cause cause;
+    private static TileEntityFurnace updateIfNeeded(TileEntityFurnace furnace, int maxBurnTime) {
+        if (cause == null) { // lazy evaluation because of tests
+            cause = Cause.source(SpongeImpl.getPlugin()).build();
         }
-
-        final int passedBurnTime = (Integer) keyValues.get(Keys.PASSED_BURN_TIME); //time (int) the fuel item already burned
-        final int maxBurnTime = (Integer) keyValues.get(Keys.MAX_BURN_TIME); //time (int) the fuel can burn until its depleted
-        final int passedCookTime = (Integer) keyValues.get(Keys.PASSED_COOK_TIME); //time (int) the item already cooked
-        final int maxCookTime = (Integer) keyValues.get(Keys.MAX_COOK_TIME); //time (int) the item have to cook
-
-        if (passedBurnTime > maxBurnTime || passedCookTime > maxCookTime) {
-            return false;
-        }
-
-        final boolean needsUpdate = !tileEntity.isBurning() && maxBurnTime > 0 || tileEntity.isBurning() && maxBurnTime == 0;
-
+        final boolean needsUpdate = !furnace.isBurning() && maxBurnTime > 0 || furnace.isBurning() && maxBurnTime == 0;
         if (needsUpdate) {
-            final World world = (World) tileEntity.getWorld();
-            world.setBlockType(tileEntity.getPos().getX(), tileEntity.getPos().getY(),
-                    tileEntity.getPos().getZ(), maxBurnTime > 0 ? BlockTypes.LIT_FURNACE : BlockTypes.FURNACE, this.cause);
-            tileEntity = (TileEntityFurnace) tileEntity.getWorld().getTileEntity(tileEntity.getPos());
+            final World world = (World) furnace.getWorld();
+            world.setBlockType(furnace.getPos().getX(), furnace.getPos().getY(),
+                    furnace.getPos().getZ(), maxBurnTime > 0 ? BlockTypes.LIT_FURNACE : BlockTypes.FURNACE, cause);
+            furnace = (TileEntityFurnace) furnace.getWorld().getTileEntity(furnace.getPos());
         }
-
-        tileEntity.setField(0, maxBurnTime - passedBurnTime);
-        tileEntity.setField(1, maxBurnTime);
-        tileEntity.setField(2, passedCookTime);
-        tileEntity.setField(3, maxCookTime);
-
-        return true;
+        return furnace;
     }
 
     @Override
-    protected Map<Key<?>, ?> getValues(TileEntityFurnace tileEntity) {
-        HashMap<Key<?>, Integer> values = Maps.newHashMapWithExpectedSize(3);
-
-        final int passedBurnTime = tileEntity.getField(1) - tileEntity.getField(0);
-        final int maxBurnTime = tileEntity.getField(1);
-        final int passedCookTime = tileEntity.getField(2);
-        final int maxCookTime = tileEntity.getField(3);
-
-        values.put(Keys.PASSED_BURN_TIME, passedBurnTime);
-        values.put(Keys.MAX_BURN_TIME, maxBurnTime);
-        values.put(Keys.PASSED_COOK_TIME, passedCookTime);
-        values.put(Keys.MAX_COOK_TIME, maxCookTime);
-
-        return values;
-    }
-
-    @Override
-    protected FurnaceData createManipulator() {
+    public FurnaceData createManipulator() {
         return new SpongeFurnaceData();
     }
 
@@ -141,8 +99,178 @@ public class FurnaceDataProcessor extends AbstractTileEntityDataProcessor<TileEn
         return Optional.of(furnaceData);
     }
 
-    @Override
-    public DataTransactionResult remove(DataHolder dataHolder) {
-        return DataTransactionResult.failNoData(); //cannot be removed
+    private static class BurnTimeProcessor extends KeyValueProcessor<TileEntityFurnace, Integer, MutableBoundedValue<Integer>> {
+
+        @Override
+        protected boolean hasData(TileEntityFurnace holder) {
+            return true;
+        }
+
+        @Override
+        protected MutableBoundedValue<Integer> constructValue(Integer defaultValue) {
+            return SpongeValueFactory.boundedBuilder(Keys.PASSED_BURN_TIME)
+                    .minimum(0)
+                    .maximum(1600)
+                    .defaultValue(defaultValue)
+                    .build();
+        }
+
+        @Override
+        protected boolean set(TileEntityFurnace container, Integer value) {
+            if (value > container.getField(1)) { // value cannot be higher than
+                                                 // the maximum
+                return false;
+            }
+            container = updateIfNeeded(container, container.getField(1));
+            container.setField(0, container.getField(1) - value);
+            return true;
+        }
+
+        @Override
+        protected Optional<Integer> get(TileEntityFurnace container) {
+            // When the furnace is not burning, the value is 0
+            return Optional.of(container.isBurning() ? container.getField(1) - container.getField(0) : 0);
+        }
+
+        @Override
+        protected ImmutableValue<Integer> constructImmutableValue(Integer value) {
+            return SpongeValueFactory.boundedBuilder(Keys.PASSED_BURN_TIME)
+                    .minimum(0)
+                    .maximum(Integer.MAX_VALUE)
+                    .build()
+                    .asImmutable();
+        }
+    }
+
+    private static class MaxBurnTimeProcessor extends KeyValueProcessor<TileEntityFurnace, Integer, MutableBoundedValue<Integer>> {
+
+        @Override
+        protected boolean hasData(TileEntityFurnace holder) {
+            return true;
+        }
+
+        @Override
+        protected MutableBoundedValue<Integer> constructValue(Integer defaultValue) {
+            return SpongeValueFactory.boundedBuilder(Keys.MAX_BURN_TIME)
+                    .minimum(0)
+                    .maximum(Integer.MAX_VALUE)
+                    .defaultValue(defaultValue)
+                    .build();
+        }
+
+        @Override
+        protected boolean set(TileEntityFurnace container, Integer value) {
+            container = updateIfNeeded(container, value);
+            container.setField(1, value);
+            return true;
+        }
+
+        @Override
+        protected Optional<Integer> get(TileEntityFurnace container) {
+            return Optional.of(container.getField(1));
+        }
+
+        @Override
+        protected ImmutableValue<Integer> constructImmutableValue(Integer value) {
+            return SpongeValueFactory.boundedBuilder(Keys.MAX_BURN_TIME)
+                    .minimum(0)
+                    .maximum(Integer.MAX_VALUE)
+                    .defaultValue(1000)
+                    .actualValue(value)
+                    .build()
+                    .asImmutable();
+        }
+    }
+
+    private static class CookTimeProcessor extends KeyValueProcessor<TileEntityFurnace, Integer, MutableBoundedValue<Integer>> {
+
+        @Override
+        protected boolean hasData(TileEntityFurnace holder) {
+            return true;
+        }
+
+        @Override
+        protected MutableBoundedValue<Integer> constructValue(Integer defaultValue) {
+            return SpongeValueFactory.boundedBuilder(Keys.PASSED_COOK_TIME)
+                    .minimum(0)
+                    .maximum(200) // TODO
+                    .defaultValue(defaultValue)
+                    .build();
+        }
+
+        @Override
+        protected boolean set(TileEntityFurnace container, Integer value) {
+            // The passedCookTime of nothing cannot be set | Cannot be higher
+            // than the maximum
+            if (container.getStackInSlot(0) == null || value > container.getField(3)) {
+                return false;
+            }
+            container = updateIfNeeded(container, container.getField(1));
+            container.setField(2, value);
+            return true;
+        }
+
+        @Override
+        protected Optional<Integer> get(TileEntityFurnace container) {
+            // The passedCookTime of nothing cannot be set
+            return Optional.of(container.getStackInSlot(0) != null ? container.getField(2) : 0);
+        }
+
+        @Override
+        protected ImmutableValue<Integer> constructImmutableValue(Integer value) {
+            return SpongeValueFactory.boundedBuilder(Keys.PASSED_COOK_TIME)
+                    .minimum(0)
+                    .maximum(Integer.MAX_VALUE)
+                    .defaultValue(200)
+                    .actualValue(value)
+                    .build()
+                    .asImmutable();
+        }
+
+    }
+
+    private static class MaxCookTimeProcessor extends KeyValueProcessor<TileEntityFurnace, Integer, MutableBoundedValue<Integer>> {
+
+        @Override
+        protected boolean hasData(TileEntityFurnace holder) {
+            return true;
+        }
+
+        @Override
+        protected MutableBoundedValue<Integer> constructValue(Integer defaultValue) {
+            return SpongeValueFactory.boundedBuilder(Keys.MAX_COOK_TIME)
+                    .minimum(0)
+                    .maximum(Integer.MAX_VALUE)
+                    .defaultValue(defaultValue)
+                    .build();
+        }
+
+        @Override
+        protected boolean set(TileEntityFurnace container, Integer value) {
+            if (container.getStackInSlot(0) == null) {
+                return false; // Item cannot be null, the time depends on it
+            }
+            container = updateIfNeeded(container, container.getField(1));
+            container.setField(3, value);
+            return true;
+        }
+
+        @Override
+        protected Optional<Integer> get(TileEntityFurnace container) {
+            // Item cannot be null, the time depends on it
+            return Optional.of(container.getStackInSlot(0) != null ? container.getField(3) : 0);
+        }
+
+        @Override
+        protected ImmutableValue<Integer> constructImmutableValue(Integer value) {
+            return SpongeValueFactory.boundedBuilder(Keys.MAX_COOK_TIME)
+                    .minimum(0)
+                    .maximum(Integer.MAX_VALUE)
+                    .defaultValue(200)
+                    .actualValue(value)
+                    .build()
+                    .asImmutable();
+        }
+
     }
 }

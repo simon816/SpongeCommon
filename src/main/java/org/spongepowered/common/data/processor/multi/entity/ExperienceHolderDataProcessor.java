@@ -26,55 +26,33 @@ package org.spongepowered.common.data.processor.multi.entity;
 
 import static org.spongepowered.common.data.util.DataUtil.getData;
 
-import com.google.common.collect.ImmutableMap;
 import net.minecraft.entity.player.EntityPlayer;
 import org.spongepowered.api.data.DataContainer;
-import org.spongepowered.api.data.DataHolder;
-import org.spongepowered.api.data.DataTransactionResult;
-import org.spongepowered.api.data.key.Key;
 import org.spongepowered.api.data.key.Keys;
 import org.spongepowered.api.data.manipulator.immutable.entity.ImmutableExperienceHolderData;
 import org.spongepowered.api.data.manipulator.mutable.entity.ExperienceHolderData;
+import org.spongepowered.api.data.value.immutable.ImmutableBoundedValue;
+import org.spongepowered.api.data.value.immutable.ImmutableValue;
+import org.spongepowered.api.data.value.mutable.MutableBoundedValue;
 import org.spongepowered.common.data.manipulator.mutable.entity.SpongeExperienceHolderData;
-import org.spongepowered.common.data.processor.common.AbstractEntityDataProcessor;
+import org.spongepowered.common.data.processor.common.AbstractSpongeDataProcessor;
+import org.spongepowered.common.data.processor.common.ExperienceHolderUtils;
+import org.spongepowered.common.data.value.SpongeValueFactory;
 
-import java.util.Map;
 import java.util.Optional;
 
-public class ExperienceHolderDataProcessor extends AbstractEntityDataProcessor<EntityPlayer, ExperienceHolderData, ImmutableExperienceHolderData> {
+public class ExperienceHolderDataProcessor extends AbstractSpongeDataProcessor<ExperienceHolderData, ImmutableExperienceHolderData> {
 
     public ExperienceHolderDataProcessor() {
-        super(EntityPlayer.class);
+        registerValueProcessor(Keys.EXPERIENCE_LEVEL, EntityPlayer.class, new XpLevelProcessor());
+        registerValueProcessor(Keys.TOTAL_EXPERIENCE, EntityPlayer.class, new TotalXpProcessor());
+        registerValueProcessor(Keys.EXPERIENCE_SINCE_LEVEL, EntityPlayer.class, new XpSinceLevelProcessor());
+        registerValueProcessor(Keys.EXPERIENCE_FROM_START_OF_LEVEL, EntityPlayer.class, new XpFromLevelStartProcessor());
     }
 
     @Override
     protected ExperienceHolderData createManipulator() {
         return new SpongeExperienceHolderData();
-    }
-
-    @Override
-    protected boolean doesDataExist(EntityPlayer entity) {
-        return true;
-    }
-
-    @Override
-    protected boolean set(EntityPlayer entity, Map<Key<?>, Object> keyValues) {
-        entity.experienceLevel = (Integer) keyValues.get(Keys.EXPERIENCE_LEVEL);
-        entity.experienceTotal = (Integer) keyValues.get(Keys.TOTAL_EXPERIENCE);
-        entity.experience = (float) (Integer) keyValues.get(Keys.EXPERIENCE_SINCE_LEVEL) / entity.xpBarCap();
-        return true;
-    }
-
-    @Override
-    protected Map<Key<?>, ?> getValues(EntityPlayer entity) {
-        final int level = entity.experienceLevel;
-        final int totalExp = entity.experienceTotal;
-        final int expSinceLevel = (int) (entity.experience * entity.xpBarCap());
-        final int expBetweenLevels = entity.xpBarCap();
-        return ImmutableMap.<Key<?>, Object>of(Keys.EXPERIENCE_LEVEL, level,
-                Keys.TOTAL_EXPERIENCE, totalExp,
-                Keys.EXPERIENCE_SINCE_LEVEL, expSinceLevel,
-                Keys.EXPERIENCE_FROM_START_OF_LEVEL, expBetweenLevels);
     }
 
     @Override
@@ -85,9 +63,172 @@ public class ExperienceHolderDataProcessor extends AbstractEntityDataProcessor<E
         return Optional.of(experienceHolderData);
     }
 
-    @Override
-    public DataTransactionResult remove(DataHolder dataHolder) {
-        return DataTransactionResult.failNoData();
+    private static class XpLevelProcessor extends KeyValueProcessor<EntityPlayer, Integer, MutableBoundedValue<Integer>> {
+
+        @Override
+        protected boolean hasData(EntityPlayer entity) {
+            return true;
+        }
+
+        @Override
+        protected boolean set(EntityPlayer player, Integer value) {
+            int totalExp = 0;
+            for (int i = 0; i < value; i++) {
+                totalExp += ExperienceHolderUtils.getExpBetweenLevels(i);
+            }
+            player.experienceTotal = totalExp;
+            player.experience = 0;
+            player.experienceLevel = value;
+            return true;
+        }
+
+        @Override
+        protected MutableBoundedValue<Integer> constructValue(Integer defaultValue) {
+            return SpongeValueFactory.boundedBuilder(Keys.EXPERIENCE_LEVEL)
+                    .defaultValue(0)
+                    .minimum(0)
+                    .maximum(Integer.MAX_VALUE)
+                    .actualValue(defaultValue)
+                    .build();
+        }
+
+        @Override
+        protected Optional<Integer> get(EntityPlayer entity) {
+            return Optional.of(entity.experienceLevel);
+        }
+
+        @Override
+        protected ImmutableBoundedValue<Integer> constructImmutableValue(Integer value) {
+            return constructValue(value).asImmutable();
+        }
+    }
+
+    private static class TotalXpProcessor extends KeyValueProcessor<EntityPlayer, Integer, MutableBoundedValue<Integer>> {
+
+        @Override
+        protected boolean hasData(EntityPlayer entity) {
+            return true;
+        }
+
+        @Override
+        protected MutableBoundedValue<Integer> constructValue(Integer defaultValue) {
+            return SpongeValueFactory.boundedBuilder(Keys.TOTAL_EXPERIENCE)
+                    .defaultValue(0)
+                    .minimum(0)
+                    .maximum(Integer.MAX_VALUE)
+                    .actualValue(defaultValue)
+                    .build();
+        }
+
+        @Override
+        protected boolean set(EntityPlayer container, Integer value) {
+            int level = -1;
+
+            int experienceForCurrentLevel;
+            int experienceAtNextLevel = -1;
+
+            // We work iteratively to get the level. Remember, the level variable contains the CURRENT level and the method
+            // calculates what we need to get to the NEXT level, so we work our way up, summing up all these intervals, until
+            // we get an experience value that is larger than the value. This gives us our level.
+            //
+            // If the cumulative experience required for level+1 is still below that (or in the edge case, equal to) our
+            // value, we need to go up a level. So, if the boundary is at 7 exp, and we have 7 exp, we need one more loop
+            // to increment the level as we are at 100% and therefore should be at level+1.
+            do {
+                // We need this later.
+                experienceForCurrentLevel = experienceAtNextLevel;
+
+                // Increment level, as we know we are at least that level (in the first instance -1 -> 0)
+                // and add the next amount of experience to the variable.
+                experienceAtNextLevel += ExperienceHolderUtils.getExpBetweenLevels(++level);
+            } while (experienceAtNextLevel <= value);
+
+            // Once we're here, we have the correct level. The experience is the decimal fraction that we are through the
+            // current level. This is why we require the experienceForCurrentLevel variable, we need the difference between
+            // the current value and the beginning of the level.
+            container.experience = (float)(value - experienceForCurrentLevel) / ExperienceHolderUtils.getExpBetweenLevels(level);
+            container.experienceLevel = level;
+            container.experienceTotal = value;
+            return true;
+        }
+
+        @Override
+        protected Optional<Integer> get(EntityPlayer entity) {
+            return Optional.of(entity.experienceTotal);
+        }
+
+        @Override
+        protected ImmutableValue<Integer> constructImmutableValue(Integer value) {
+            return constructValue(value).asImmutable();
+        }
+
+    }
+
+    private static class XpSinceLevelProcessor extends KeyValueProcessor<EntityPlayer, Integer, MutableBoundedValue<Integer>> {
+
+        @Override
+        protected boolean hasData(EntityPlayer entity) {
+            return true;
+        }
+
+        @Override
+        protected MutableBoundedValue<Integer> constructValue(Integer defaultValue) {
+            return SpongeValueFactory.boundedBuilder(Keys.EXPERIENCE_SINCE_LEVEL)
+                    .minimum(0)
+                    .maximum(Integer.MAX_VALUE)
+                    .defaultValue(0)
+                    .actualValue(defaultValue)
+                    .build();
+        }
+
+        @Override
+        protected boolean set(EntityPlayer container, Integer value) {
+            while (value >= container.xpBarCap()) {
+                value -= container.xpBarCap();
+            }
+            container.experience = (float) value / container.xpBarCap();
+            return true;
+        }
+
+        @Override
+        protected Optional<Integer> get(EntityPlayer entity) {
+            return Optional.of((int) (entity.experience * entity.xpBarCap()));
+        }
+
+        @Override
+        protected ImmutableValue<Integer> constructImmutableValue(Integer value) {
+            return constructValue(value).asImmutable();
+        }
+    }
+
+    private static class XpFromLevelStartProcessor extends KeyValueProcessor<EntityPlayer, Integer, ImmutableBoundedValue<Integer>> {
+
+        @Override
+        protected ImmutableBoundedValue<Integer> constructValue(Integer defaultValue) {
+            return SpongeValueFactory.boundedBuilder(Keys.EXPERIENCE_FROM_START_OF_LEVEL)
+                    .defaultValue(0)
+                    .actualValue(defaultValue)
+                    .minimum(0)
+                    .maximum(Integer.MAX_VALUE)
+                    .build()
+                    .asImmutable();
+        }
+
+        @Override
+        protected boolean set(EntityPlayer container, Integer value) {
+            return false;
+        }
+
+        @Override
+        protected Optional<Integer> get(EntityPlayer entity) {
+            return Optional.of(entity.xpBarCap());
+        }
+
+        @Override
+        protected ImmutableValue<Integer> constructImmutableValue(Integer value) {
+            return constructValue(value);
+        }
+
     }
 
 }

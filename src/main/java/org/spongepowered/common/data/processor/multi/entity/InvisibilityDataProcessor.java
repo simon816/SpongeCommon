@@ -24,67 +24,35 @@
  */
 package org.spongepowered.common.data.processor.multi.entity;
 
-import com.google.common.collect.ImmutableMap;
 import net.minecraft.entity.Entity;
 import org.spongepowered.api.data.DataContainer;
-import org.spongepowered.api.data.DataHolder;
-import org.spongepowered.api.data.DataTransactionResult;
-import org.spongepowered.api.data.key.Key;
 import org.spongepowered.api.data.key.Keys;
 import org.spongepowered.api.data.manipulator.immutable.entity.ImmutableInvisibilityData;
 import org.spongepowered.api.data.manipulator.mutable.entity.InvisibilityData;
+import org.spongepowered.api.data.value.immutable.ImmutableValue;
+import org.spongepowered.api.data.value.mutable.Value;
 import org.spongepowered.common.data.manipulator.mutable.entity.SpongeInvisibilityData;
-import org.spongepowered.common.data.processor.common.AbstractEntityDataProcessor;
+import org.spongepowered.common.data.processor.common.AbstractSpongeDataProcessor;
+import org.spongepowered.common.data.value.immutable.ImmutableSpongeValue;
+import org.spongepowered.common.data.value.mutable.SpongeValue;
 import org.spongepowered.common.entity.EntityUtil;
 import org.spongepowered.common.interfaces.entity.IMixinEntity;
 
-import java.util.Map;
 import java.util.Optional;
 
 public class InvisibilityDataProcessor
-        extends AbstractEntityDataProcessor<Entity, InvisibilityData, ImmutableInvisibilityData> {
+        extends AbstractSpongeDataProcessor<InvisibilityData, ImmutableInvisibilityData> {
 
     public InvisibilityDataProcessor() {
-        super(Entity.class);
+        registerValueProcessor(Keys.INVISIBLE, Entity.class, new InvisibleProcessor());
+        registerValueProcessor(Keys.VANISH, Entity.class, new VanishProcessor());
+        registerValueProcessor(Keys.VANISH_IGNORES_COLLISION, Entity.class, new IgnoresCollisionProcessor());
+        registerValueProcessor(Keys.VANISH_PREVENTS_TARGETING, Entity.class, new PreventsTargetingProcessor());
     }
 
     @Override
     protected InvisibilityData createManipulator() {
         return new SpongeInvisibilityData();
-    }
-
-    @Override
-    protected boolean doesDataExist(Entity dataHolder) {
-        return true;
-    }
-
-    @Override
-    protected boolean set(Entity dataHolder, Map<Key<?>, Object> keyValues) {
-        if (!dataHolder.worldObj.isRemote) {
-            final boolean invis = (Boolean) keyValues.get(Keys.INVISIBLE);
-            final boolean collision = (Boolean) keyValues.get(Keys.VANISH_IGNORES_COLLISION);
-            final boolean untargetable = (Boolean) keyValues.get(Keys.VANISH_PREVENTS_TARGETING);
-            final boolean vanish = (Boolean) keyValues.get(Keys.VANISH);
-            dataHolder.setInvisible(invis);
-            if (vanish) {
-                final IMixinEntity mixinEntity = EntityUtil.toMixin(dataHolder);
-                mixinEntity.setVanished(true);
-                mixinEntity.setIgnoresCollision(collision);
-                mixinEntity.setUntargetable(untargetable);
-            } else {
-                EntityUtil.toMixin(dataHolder).setVanished(false);
-            }
-            return true;
-        }
-        return false;
-    }
-
-    @Override
-    protected Map<Key<?>, ?> getValues(Entity dataHolder) {
-        return ImmutableMap.of(Keys.INVISIBLE, dataHolder.isInvisible(),
-                Keys.VANISH, ((IMixinEntity) dataHolder).isVanished(),
-                Keys.VANISH_IGNORES_COLLISION, ((IMixinEntity) dataHolder).ignoresCollision(),
-                Keys.VANISH_PREVENTS_TARGETING, ((IMixinEntity) dataHolder).isUntargetable());
     }
 
     @Override
@@ -100,8 +68,134 @@ public class InvisibilityDataProcessor
                 .set(Keys.VANISH_PREVENTS_TARGETING, targeting));
     }
 
-    @Override
-    public DataTransactionResult remove(DataHolder dataHolder) {
-        return DataTransactionResult.failNoData();
+    private static class VanishProcessor extends KeyValueProcessor<Entity, Boolean, Value<Boolean>> {
+
+        @Override
+        protected Value<Boolean> constructValue(Boolean actualValue) {
+            return new SpongeValue<>(Keys.VANISH, false, actualValue);
+        }
+
+        @Override
+        protected ImmutableValue<Boolean> constructImmutableValue(Boolean value) {
+            return ImmutableSpongeValue.cachedOf(Keys.VANISH, false, value);
+        }
+
+        @Override
+        protected Optional<Boolean> get(Entity container) {
+            return Optional.of(((IMixinEntity) container).isVanished());
+        }
+
+        @Override
+        protected boolean set(Entity container, Boolean value) {
+            if (!container.worldObj.isRemote) {
+                EntityUtil.toMixin(container).setVanished(value);
+                return true;
+            }
+            return false;
+        }
+    }
+
+    private static class InvisibleProcessor extends KeyValueProcessor<Entity, Boolean, Value<Boolean>> {
+
+        @Override
+        protected boolean hasData(Entity holder) {
+            return true;
+        }
+
+        @Override
+        protected Value<Boolean> constructValue(Boolean actualValue) {
+            return new SpongeValue<>(Keys.INVISIBLE, false, actualValue);
+        }
+
+        @Override
+        protected boolean set(Entity container, Boolean value) {
+            if (!container.worldObj.isRemote) {
+                container.setInvisible(value);
+                return true;
+            }
+            return false;
+        }
+
+        @Override
+        protected Optional<Boolean> get(Entity container) {
+            return Optional.of(container.isInvisible());
+        }
+
+        @Override
+        protected ImmutableValue<Boolean> constructImmutableValue(Boolean value) {
+            return ImmutableSpongeValue.cachedOf(Keys.INVISIBLE, false, value);
+        }
+
+    }
+
+    private static class IgnoresCollisionProcessor extends KeyValueProcessor<Entity, Boolean, Value<Boolean>> {
+
+        @Override
+        protected boolean hasData(Entity holder) {
+            return true;
+        }
+
+        @Override
+        protected Value<Boolean> constructValue(Boolean actualValue) {
+            return new SpongeValue<>(Keys.VANISH_IGNORES_COLLISION, false, actualValue);
+        }
+
+        @Override
+        protected boolean set(Entity container, Boolean value) {
+            if (!container.worldObj.isRemote) {
+                if (!((IMixinEntity) container).isVanished()) {
+                    return false;
+                }
+                ((IMixinEntity) container).setIgnoresCollision(value);
+                return true;
+            }
+            return false;
+        }
+
+        @Override
+        protected Optional<Boolean> get(Entity container) {
+            return Optional.of(((IMixinEntity) container).ignoresCollision());
+        }
+
+        @Override
+        protected ImmutableValue<Boolean> constructImmutableValue(Boolean value) {
+            return ImmutableSpongeValue.cachedOf(Keys.VANISH_IGNORES_COLLISION, false, value);
+        }
+    }
+
+    private static class PreventsTargetingProcessor extends KeyValueProcessor<Entity, Boolean, Value<Boolean>> {
+
+        @Override
+        protected boolean hasData(Entity holder) {
+            return true;
+        }
+
+        @Override
+        protected Value<Boolean> constructValue(Boolean actualValue) {
+            return new SpongeValue<>(Keys.VANISH_PREVENTS_TARGETING, false, actualValue);
+        }
+
+        @Override
+        protected boolean set(Entity container, Boolean value) {
+            if (!container.worldObj.isRemote) {
+                if (!((IMixinEntity) container).isVanished()) {
+                    return false;
+                }
+                ((IMixinEntity) container).setUntargetable(value);
+                return true;
+            }
+            return false;
+        }
+
+        @Override
+        protected Optional<Boolean> get(Entity container) {
+            return Optional.of(((IMixinEntity) container).isUntargetable());
+        }
+
+        @Override
+        protected ImmutableValue<Boolean> constructImmutableValue(Boolean value) {
+            return ImmutableSpongeValue.cachedOf(Keys.VANISH_PREVENTS_TARGETING, false, value);
+        }
+
     }
 }

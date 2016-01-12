@@ -59,7 +59,7 @@ public class JukeboxDataProcessor extends
             if (jukebox.getRecord() == null) {
                 return true;
             }
-            return remove(jukebox);
+            return remove0(jukebox);
         }
         if (!(stackSnapshot.getType() instanceof ItemRecord)) {
             return false;
@@ -77,7 +77,7 @@ public class JukeboxDataProcessor extends
         return Optional.of(((org.spongepowered.api.item.inventory.ItemStack) jukebox.getRecord()).createSnapshot());
     }
 
-    private boolean remove(BlockJukebox.TileEntityJukebox jukebox) {
+    private boolean remove0(BlockJukebox.TileEntityJukebox jukebox) {
         ((Jukebox) jukebox).ejectRecord();
         IBlockState block = jukebox.getWorld().getBlockState(jukebox.getPos());
         return block.getBlock() instanceof BlockJukebox && !block.getValue(BlockJukebox.HAS_RECORD);
@@ -93,7 +93,7 @@ public class JukeboxDataProcessor extends
         if (!old.isPresent()) {
             return DataTransactionResult.successNoData();
         }
-        if (remove(jukebox)) {
+        if (remove0(jukebox)) {
             return DataTransactionResult.successRemove(constructImmutableValue(old.get()));
         }
         return DataTransactionResult.builder().result(DataTransactionResult.Type.ERROR).build();

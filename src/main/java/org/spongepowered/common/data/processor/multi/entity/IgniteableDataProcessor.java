@@ -24,27 +24,28 @@
  */
 package org.spongepowered.common.data.processor.multi.entity;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static org.spongepowered.common.data.util.DataUtil.getData;
 
-import com.google.common.collect.ImmutableMap;
 import net.minecraft.entity.Entity;
 import org.spongepowered.api.data.DataContainer;
-import org.spongepowered.api.data.DataHolder;
-import org.spongepowered.api.data.DataTransactionResult;
-import org.spongepowered.api.data.key.Key;
 import org.spongepowered.api.data.key.Keys;
 import org.spongepowered.api.data.manipulator.immutable.entity.ImmutableIgniteableData;
 import org.spongepowered.api.data.manipulator.mutable.entity.IgniteableData;
+import org.spongepowered.api.data.value.immutable.ImmutableValue;
+import org.spongepowered.api.data.value.mutable.MutableBoundedValue;
 import org.spongepowered.common.data.manipulator.mutable.entity.SpongeIgniteableData;
-import org.spongepowered.common.data.processor.common.AbstractEntityDataProcessor;
+import org.spongepowered.common.data.processor.common.AbstractSpongeDataProcessor;
+import org.spongepowered.common.data.util.DataConstants;
+import org.spongepowered.common.data.value.SpongeValueFactory;
 
-import java.util.Map;
 import java.util.Optional;
 
-public class IgniteableDataProcessor extends AbstractEntityDataProcessor<Entity, IgniteableData, ImmutableIgniteableData> {
+public class IgniteableDataProcessor extends AbstractSpongeDataProcessor<IgniteableData, ImmutableIgniteableData> {
 
     public IgniteableDataProcessor() {
-        super(Entity.class);
+        registerValueProcessor(Keys.FIRE_TICKS, Entity.class, new FireTickProcessor());
+        registerValueProcessor(Keys.FIRE_DAMAGE_DELAY, Entity.class, new DamageDelayProcessor());
     }
 
     @Override
@@ -55,41 +56,90 @@ public class IgniteableDataProcessor extends AbstractEntityDataProcessor<Entity,
     }
 
     @Override
-    public DataTransactionResult remove(DataHolder dataHolder) {
-        if (dataHolder instanceof Entity) {
-            if (((Entity) dataHolder).fire > 0) {
-                final DataTransactionResult.Builder builder = DataTransactionResult.builder();
-                builder.replace(from(dataHolder).get().getValues());
-                ((Entity) dataHolder).extinguish();
-                return builder.result(DataTransactionResult.Type.SUCCESS).build();
-            }
-        }
-        return DataTransactionResult.failNoData();
-    }
-
-    @Override
-    protected IgniteableData createManipulator() {
+    public IgniteableData createManipulator() {
         return new SpongeIgniteableData();
     }
 
-    @Override
-    protected boolean doesDataExist(Entity entity) {
-        return entity.fire > 0;
+    private static class DamageDelayProcessor extends KeyValueProcessor<Entity, Integer, MutableBoundedValue<Integer>> {
+
+        @Override
+        protected boolean hasData(Entity entity) {
+            return entity.fire > 0;
+        }
+
+        @Override
+        protected MutableBoundedValue<Integer> constructValue(Integer defaultValue) {
+            return SpongeValueFactory.boundedBuilder(Keys.FIRE_DAMAGE_DELAY)
+                    .defaultValue(20)
+                    .minimum(0)
+                    .maximum(Integer.MAX_VALUE)
+                    .actualValue(defaultValue)
+                    .build();
+        }
+
+        @Override
+        protected boolean set(Entity container, Integer value) {
+            checkArgument(value >= 0, "Fire tick delay must be equal to or greater than zero!");
+            container.fireResistance = value;
+            return true;
+        }
+
+        @Override
+        protected Optional<Integer> get(Entity container) {
+            return Optional.of(container.fireResistance);
+        }
+
+        @Override
+        protected ImmutableValue<Integer> constructImmutableValue(Integer value) {
+            return constructValue(value).asImmutable();
+        }
     }
 
-    @Override
-    protected boolean set(Entity entity, Map<Key<?>, Object> keyValues) {
-        entity.fire = (Integer) keyValues.get(Keys.FIRE_TICKS);
-        entity.fireResistance = (Integer) keyValues.get(Keys.FIRE_DAMAGE_DELAY);
-        return true;
-    }
+    private static class FireTickProcessor extends KeyValueProcessor<Entity, Integer, MutableBoundedValue<Integer>> {
 
-    @Override
-    protected Map<Key<?>, ?> getValues(Entity entity) {
-        final int fireTicks = entity.fire;
-        final int fireDamageDelay = entity.fireResistance;
-        return ImmutableMap.<Key<?>, Object>of(Keys.FIRE_TICKS, fireTicks,
-                                               Keys.FIRE_DAMAGE_DELAY, fireDamageDelay);
+        @Override
+        protected boolean hasData(Entity entity) {
+            return entity.fire > 0;
+        }
+
+        @Override
+        protected boolean remove(Entity entity) {
+            if (entity.fire >= DataConstants.MINIMUM_FIRE_TICKS) {
+                entity.extinguish();
+                return true;
+            }
+            return false;
+        }
+
+        @Override
+        protected MutableBoundedValue<Integer> constructValue(Integer defaultValue) {
+            return SpongeValueFactory.boundedBuilder(Keys.FIRE_TICKS)
+                    .defaultValue(DataConstants.DEFAULT_FIRE_TICKS)
+                    .minimum(DataConstants.MINIMUM_FIRE_TICKS)
+                    .maximum(Integer.MAX_VALUE)
+                    .actualValue(defaultValue)
+                    .build();
+        }
+
+        @Override
+        protected boolean set(Entity container, Integer value) {
+            container.fire = value;
+            return true;
+        }
+
+        @Override
+        protected Optional<Integer> get(Entity container) {
+            if (container.fire > 0) {
+                return Optional.of(container.fire);
+            }
+            return Optional.empty();
+        }
+
+        @Override
+        protected ImmutableValue<Integer> constructImmutableValue(Integer value) {
+            return constructValue(value).asImmutable();
+        }
+
     }
 
 }

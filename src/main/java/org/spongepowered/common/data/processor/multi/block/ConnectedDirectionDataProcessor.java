@@ -24,63 +24,80 @@
  */
 package org.spongepowered.common.data.processor.multi.block;
 
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Sets;
 import net.minecraft.item.ItemStack;
-import org.spongepowered.api.data.DataContainer;
-import org.spongepowered.api.data.DataHolder;
-import org.spongepowered.api.data.DataTransactionResult;
-import org.spongepowered.api.data.key.Key;
 import org.spongepowered.api.data.key.Keys;
 import org.spongepowered.api.data.manipulator.immutable.block.ImmutableConnectedDirectionData;
 import org.spongepowered.api.data.manipulator.mutable.block.ConnectedDirectionData;
+import org.spongepowered.api.data.value.mutable.SetValue;
+import org.spongepowered.api.data.value.mutable.Value;
 import org.spongepowered.api.util.Direction;
 import org.spongepowered.common.data.manipulator.mutable.block.SpongeConnectedDirectionData;
-import org.spongepowered.common.data.processor.common.AbstractMultiDataSingleTargetProcessor;
+import org.spongepowered.common.data.processor.common.AbstractSpongeDataProcessor;
+import org.spongepowered.common.data.value.mutable.SpongeSetValue;
+import org.spongepowered.common.data.value.mutable.SpongeValue;
 
-import java.util.Map;
-import java.util.Optional;
+import java.util.Set;
 
 public class ConnectedDirectionDataProcessor extends
-        AbstractMultiDataSingleTargetProcessor<ItemStack, ConnectedDirectionData, ImmutableConnectedDirectionData> {
+        AbstractSpongeDataProcessor<ConnectedDirectionData, ImmutableConnectedDirectionData> {
 
     public ConnectedDirectionDataProcessor() {
-        super(ItemStack.class);
-    }
+        registerValueProcessor(Keys.CONNECTED_DIRECTIONS, ItemStack.class, new DirectionsProcessor());
+        registerValueProcessor(Keys.CONNECTED_EAST, ItemStack.class, new EastProcessor());
+        registerValueProcessor(Keys.CONNECTED_NORTH, ItemStack.class, new NorthProcessor());
+        registerValueProcessor(Keys.CONNECTED_SOUTH, ItemStack.class, new SouthProcessor());
+        registerValueProcessor(Keys.CONNECTED_WEST, ItemStack.class, new WestProcessor());
 
-    @Override
-    public Optional<ConnectedDirectionData> fill(DataContainer container, ConnectedDirectionData m) {
-        return Optional.of(m);
-    }
-
-    @Override
-    public DataTransactionResult remove(DataHolder dataHolder) {
-        return DataTransactionResult.failNoData();
-    }
-
-    @Override
-    protected boolean doesDataExist(ItemStack entity) {
-        return false;
-    }
-
-    @Override
-    protected boolean set(ItemStack entity, Map<Key<?>, Object> keyValues) {
-        return false;
-    }
-
-    @Override
-    protected Map<Key<?>, ?> getValues(ItemStack entity) {
-        return ImmutableMap.<Key<?>, Object>of(
-                Keys.CONNECTED_DIRECTIONS, ImmutableSet.<Direction>of(),
-                Keys.CONNECTED_EAST, false,
-                Keys.CONNECTED_NORTH, false,
-                Keys.CONNECTED_SOUTH, false,
-                Keys.CONNECTED_WEST, false);
     }
 
     @Override
     protected ConnectedDirectionData createManipulator() {
         return new SpongeConnectedDirectionData();
+    }
+
+    private static class DirectionsProcessor extends KeyValueProcessor2<ItemStack, Set<Direction>, SetValue<Direction>> {
+
+        @Override
+        public SetValue<Direction> constructValue(Set<Direction> defaultValue) {
+            return new SpongeSetValue<>(Keys.CONNECTED_DIRECTIONS, Sets.newHashSet(), defaultValue);
+        }
+    }
+
+    private static class EastProcessor extends KeyValueProcessor2<ItemStack, Boolean, Value<Boolean>> {
+
+        @Override
+        public Value<Boolean> constructValue(Boolean value) {
+            return new SpongeValue<>(Keys.CONNECTED_EAST, false, value);
+        }
+
+    }
+
+    private static class NorthProcessor extends KeyValueProcessor2<ItemStack, Boolean, Value<Boolean>> {
+
+        @Override
+        public Value<Boolean> constructValue(Boolean value) {
+            return new SpongeValue<>(Keys.CONNECTED_NORTH, false, value);
+        }
+
+    }
+
+    private static class SouthProcessor extends KeyValueProcessor2<ItemStack, Boolean, Value<Boolean>> {
+
+        @Override
+        public Value<Boolean> constructValue(Boolean value) {
+            return new SpongeValue<>(Keys.CONNECTED_SOUTH, false, value);
+        }
+
+    }
+
+    private static class WestProcessor extends KeyValueProcessor2<ItemStack, Boolean, Value<Boolean>> {
+
+        @Override
+        public Value<Boolean> constructValue(Boolean value) {
+            return new SpongeValue<>(Keys.CONNECTED_WEST, false, value);
+        }
+
     }
 
 }

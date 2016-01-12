@@ -24,44 +24,26 @@
  */
 package org.spongepowered.common.data.processor.multi.entity;
 
-import com.google.common.collect.ImmutableMap;
 import org.spongepowered.api.data.DataContainer;
-import org.spongepowered.api.data.DataHolder;
-import org.spongepowered.api.data.DataTransactionResult;
-import org.spongepowered.api.data.key.Key;
 import org.spongepowered.api.data.key.Keys;
 import org.spongepowered.api.data.manipulator.immutable.entity.ImmutableVehicleData;
 import org.spongepowered.api.data.manipulator.mutable.entity.VehicleData;
+import org.spongepowered.api.data.value.immutable.ImmutableValue;
+import org.spongepowered.api.data.value.mutable.Value;
 import org.spongepowered.api.entity.Entity;
 import org.spongepowered.api.entity.EntitySnapshot;
 import org.spongepowered.common.data.manipulator.mutable.entity.SpongeVehicleData;
-import org.spongepowered.common.data.processor.common.AbstractEntityDataProcessor;
+import org.spongepowered.common.data.processor.common.AbstractSpongeDataProcessor;
 import org.spongepowered.common.data.value.immutable.ImmutableSpongeValue;
+import org.spongepowered.common.data.value.mutable.SpongeValue;
 
-import java.util.Map;
 import java.util.Optional;
 
-public class VehicleDataProcessor extends AbstractEntityDataProcessor<net.minecraft.entity.Entity, VehicleData, ImmutableVehicleData> {
+public class VehicleDataProcessor extends AbstractSpongeDataProcessor<VehicleData, ImmutableVehicleData> {
 
     public VehicleDataProcessor() {
-        super(net.minecraft.entity.Entity.class);
-    }
-
-    @Override
-    protected boolean doesDataExist(net.minecraft.entity.Entity entity) {
-        return entity.ridingEntity != null;
-    }
-
-    @Override
-    protected boolean set(net.minecraft.entity.Entity entity, Map<Key<?>, Object> keyValues) {
-        return ((Entity) entity).setVehicle(((EntitySnapshot) keyValues.get(Keys.VEHICLE)).restore().orElse(null)).isSuccessful();
-
-    }
-
-    @Override
-    protected Map<Key<?>, ?> getValues(net.minecraft.entity.Entity entity) {
-        return ImmutableMap.of(Keys.VEHICLE, ((Entity) entity.ridingEntity).createSnapshot(), Keys.BASE_VEHICLE, ((Entity) entity
-                .getLowestRidingEntity()).createSnapshot());
+        registerValueProcessor(Keys.VEHICLE, net.minecraft.entity.Entity.class, new VehicleProcessor());
+        registerValueProcessor(Keys.BASE_VEHICLE, net.minecraft.entity.Entity.class, new BaseVehicleProcessor());
     }
 
     @Override
@@ -76,22 +58,79 @@ public class VehicleDataProcessor extends AbstractEntityDataProcessor<net.minecr
     }
 
     @Override
-    public DataTransactionResult remove(DataHolder dataHolder) {
-        if (supports(dataHolder)) {
-            net.minecraft.entity.Entity entity = ((net.minecraft.entity.Entity) dataHolder);
-            if (entity.ridingEntity != null) {
-                final EntitySnapshot previousVehicle = ((Entity) entity.getRidingEntity()).createSnapshot();
-                entity.dismountRidingEntity();
-                return DataTransactionResult.successResult(new ImmutableSpongeValue<>(Keys.VEHICLE, previousVehicle));
-            }
-            return DataTransactionResult.builder().result(DataTransactionResult.Type.SUCCESS).build();
-        } else {
-            return DataTransactionResult.failNoData();
-        }
+    public VehicleData createManipulator() {
+        return new SpongeVehicleData();
     }
 
-    @Override
-    protected VehicleData createManipulator() {
-        return new SpongeVehicleData();
+    private static class VehicleProcessor extends KeyValueProcessor<net.minecraft.entity.Entity, EntitySnapshot, Value<EntitySnapshot>> {
+
+        @Override
+        protected boolean hasData(net.minecraft.entity.Entity entity) {
+            return entity.ridingEntity != null;
+        }
+
+        @Override
+        protected boolean remove(net.minecraft.entity.Entity entity) {
+            if (entity.isRiding()) {
+                entity.dismountRidingEntity();
+                return true;
+            }
+            return false;
+        }
+
+        @Override
+        protected Value<EntitySnapshot> constructValue(EntitySnapshot defaultValue) {
+            return new SpongeValue<>(Keys.VEHICLE, defaultValue);
+        }
+
+        @Override
+        protected boolean set(net.minecraft.entity.Entity container, EntitySnapshot value) {
+            return ((Entity) container).setVehicle(value.restore().orElse(null)).isSuccessful();
+        }
+
+        @Override
+        protected Optional<EntitySnapshot> get(net.minecraft.entity.Entity container) {
+            Entity entity = (Entity) container.ridingEntity;
+            if (entity == null) {
+                return Optional.empty();
+            } else {
+                return Optional.of(entity.createSnapshot());
+            }
+        }
+
+        @Override
+        protected ImmutableValue<EntitySnapshot> constructImmutableValue(EntitySnapshot value) {
+            return new ImmutableSpongeValue<>(Keys.VEHICLE, value);
+        }
+
+    }
+
+    private static class BaseVehicleProcessor extends KeyValueProcessor<net.minecraft.entity.Entity, EntitySnapshot, Value<EntitySnapshot>> {
+
+        @Override
+        protected boolean hasData(net.minecraft.entity.Entity entity) {
+            return entity.isRiding();
+        }
+
+        @Override
+        protected Value<EntitySnapshot> constructValue(EntitySnapshot defaultValue) {
+            return new SpongeValue<>(Keys.BASE_VEHICLE, defaultValue);
+        }
+
+        @Override
+        protected boolean set(net.minecraft.entity.Entity container, EntitySnapshot value) {
+            return ((Entity) container).setVehicle(value.restore().orElse(null)).isSuccessful();
+        }
+
+        @Override
+        protected Optional<EntitySnapshot> get(net.minecraft.entity.Entity container) {
+            return Optional.ofNullable(container.getLowestRidingEntity() == null ? null : ((Entity) container.getLowestRidingEntity()).createSnapshot());
+        }
+
+        @Override
+        protected ImmutableValue<EntitySnapshot> constructImmutableValue(EntitySnapshot value) {
+            return new ImmutableSpongeValue<>(Keys.BASE_VEHICLE, value);
+        }
+
     }
 }

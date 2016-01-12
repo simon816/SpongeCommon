@@ -27,7 +27,6 @@ package org.spongepowered.common.data.processor.common;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import net.minecraft.item.ItemStack;
-import org.spongepowered.api.data.DataHolder;
 import org.spongepowered.api.data.manipulator.DataManipulator;
 import org.spongepowered.api.data.manipulator.ImmutableDataManipulator;
 
@@ -45,8 +44,8 @@ public abstract class AbstractItemDataProcessor<Manipulator extends DataManipula
     }
 
     @Override
-    public final boolean supports(DataHolder dataHolder) {
-        return dataHolder instanceof ItemStack && this.predicate.test((ItemStack) dataHolder);
+    public final boolean supports(ItemStack dataHolder) {
+        return this.predicate.test((ItemStack) dataHolder);
     }
 
 }

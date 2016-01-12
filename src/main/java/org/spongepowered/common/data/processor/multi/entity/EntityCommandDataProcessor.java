@@ -24,36 +24,44 @@
  */
 package org.spongepowered.common.data.processor.multi.entity;
 
-import com.google.common.collect.Maps;
 import net.minecraft.entity.item.EntityMinecartCommandBlock;
-import net.minecraft.tileentity.CommandBlockBaseLogic;
+import net.minecraft.util.text.ITextComponent;
 import org.spongepowered.api.data.DataContainer;
 import org.spongepowered.api.data.DataHolder;
 import org.spongepowered.api.data.DataTransactionResult;
-import org.spongepowered.api.data.key.Key;
 import org.spongepowered.api.data.key.Keys;
 import org.spongepowered.api.data.manipulator.immutable.ImmutableCommandData;
 import org.spongepowered.api.data.manipulator.mutable.CommandData;
+import org.spongepowered.api.data.value.immutable.ImmutableValue;
+import org.spongepowered.api.data.value.mutable.MutableBoundedValue;
+import org.spongepowered.api.data.value.mutable.OptionalValue;
+import org.spongepowered.api.data.value.mutable.Value;
 import org.spongepowered.api.text.Text;
 import org.spongepowered.common.data.manipulator.mutable.SpongeCommandData;
-import org.spongepowered.common.data.processor.common.AbstractEntityDataProcessor;
+import org.spongepowered.common.data.processor.common.AbstractSpongeDataProcessor;
+import org.spongepowered.common.data.value.SpongeValueFactory;
+import org.spongepowered.common.data.value.immutable.ImmutableSpongeValue;
+import org.spongepowered.common.data.value.mutable.SpongeOptionalValue;
+import org.spongepowered.common.data.value.mutable.SpongeValue;
 import org.spongepowered.common.text.SpongeTexts;
 
-import java.util.Map;
 import java.util.Optional;
 
-public class EntityCommandDataProcessor extends AbstractEntityDataProcessor<EntityMinecartCommandBlock, CommandData, ImmutableCommandData> {
+public class EntityCommandDataProcessor extends AbstractSpongeDataProcessor<CommandData, ImmutableCommandData> {
 
     public EntityCommandDataProcessor() {
-        super(EntityMinecartCommandBlock.class);
+        registerValueProcessor(Keys.LAST_COMMAND_OUTPUT, EntityMinecartCommandBlock.class, new LastCommandProcessor());
+        registerValueProcessor(Keys.SUCCESS_COUNT, EntityMinecartCommandBlock.class, new SuccessCountProcessor());
+        registerValueProcessor(Keys.COMMAND, EntityMinecartCommandBlock.class, new CommandProcessor());
+        registerValueProcessor(Keys.TRACKS_OUTPUT, EntityMinecartCommandBlock.class, new TracksOutputProcessor());
     }
 
     @Override
     public Optional<CommandData> fill(DataContainer container, CommandData commandData) {
         if (!container.contains(
-                Keys.LAST_COMMAND_OUTPUT.getQuery(), 
-                Keys.SUCCESS_COUNT.getQuery(), 
-                Keys.COMMAND.getQuery(), 
+                Keys.LAST_COMMAND_OUTPUT.getQuery(),
+                Keys.SUCCESS_COUNT.getQuery(),
+                Keys.COMMAND.getQuery(),
                 Keys.TRACKS_OUTPUT.getQuery())) {
             return Optional.empty();
         }
@@ -62,7 +70,7 @@ public class EntityCommandDataProcessor extends AbstractEntityDataProcessor<Enti
         int successCount = container.getInt(Keys.SUCCESS_COUNT.getQuery()).get();
         String command = container.getString(Keys.COMMAND.getQuery()).get();
         boolean tracksOutput = container.getBoolean(Keys.TRACKS_OUTPUT.getQuery()).get();
-        
+
         commandData.set(Keys.LAST_COMMAND_OUTPUT, lastCommandOutput);
         commandData.set(Keys.SUCCESS_COUNT, successCount);
         commandData.set(Keys.COMMAND, command);
@@ -76,37 +84,138 @@ public class EntityCommandDataProcessor extends AbstractEntityDataProcessor<Enti
     }
 
     @Override
-    protected boolean doesDataExist(EntityMinecartCommandBlock entity) {
-        return true;
-    }
-
-    @SuppressWarnings("unchecked")
-    @Override
-    protected boolean set(EntityMinecartCommandBlock entity, Map<Key<?>, Object> keyValues) {
-        CommandBlockBaseLogic logic = entity.getCommandBlockLogic();
-        logic.setLastOutput(SpongeTexts.toComponent(((Optional<Text>) keyValues.get(Keys.LAST_COMMAND_OUTPUT)).orElse(Text.of())));
-        logic.commandStored = (String) keyValues.get(Keys.COMMAND);
-        logic.successCount = (int) keyValues.get(Keys.SUCCESS_COUNT);
-        logic.setTrackOutput((boolean) keyValues.get(Keys.TRACKS_OUTPUT));
-        entity.onUpdate();
-        return true;
-    }
-
-    @Override
-    protected Map<Key<?>, ?> getValues(EntityMinecartCommandBlock entity) {
-        CommandBlockBaseLogic logic = entity.getCommandBlockLogic();
-        Map<Key<?>, Object> values = Maps.newHashMapWithExpectedSize(4);
-        Optional<Text> lastCommandOutput = logic.getLastOutput() != null ? Optional.of(SpongeTexts.toText(logic.getLastOutput())) : Optional.empty();
-        values.put(Keys.LAST_COMMAND_OUTPUT, lastCommandOutput);
-        values.put(Keys.COMMAND, logic.commandStored);
-        values.put(Keys.SUCCESS_COUNT, logic.successCount);
-        values.put(Keys.TRACKS_OUTPUT, logic.shouldTrackOutput());
-        return values;
-    }
-
-    @Override
     protected CommandData createManipulator() {
         return new SpongeCommandData();
+    }
+
+    private static class LastCommandProcessor extends KeyValueProcessor<EntityMinecartCommandBlock, Optional<Text>, OptionalValue<Text>> {
+
+        @Override
+        protected boolean hasData(EntityMinecartCommandBlock entity) {
+            return true;
+        }
+
+        @Override
+        protected OptionalValue<Text> constructValue(Optional<Text> actualValue) {
+            return new SpongeOptionalValue<>(Keys.LAST_COMMAND_OUTPUT, actualValue);
+        }
+
+        @Override
+        protected boolean set(EntityMinecartCommandBlock container, Optional<Text> value) {
+            container.getCommandBlockLogic().setLastOutput(SpongeTexts.toComponent(value.orElse(Text.of())));
+            container.onUpdate();
+            return true;
+        }
+
+        @Override
+        protected Optional<Optional<Text>> get(EntityMinecartCommandBlock container) {
+            ITextComponent output = container.getCommandBlockLogic().getLastOutput();
+            Optional<Text> text = output != null ? Optional.of(SpongeTexts.toText(output)) : Optional.empty();
+            return Optional.of(text); // #OptionalWrapping o.o
+        }
+
+        @Override
+        protected ImmutableValue<Optional<Text>> constructImmutableValue(Optional<Text> value) {
+            return constructValue(value).asImmutable();
+        }
+
+    }
+
+    private static class SuccessCountProcessor extends KeyValueProcessor<EntityMinecartCommandBlock, Integer, MutableBoundedValue<Integer>> {
+
+        @Override
+        protected boolean hasData(EntityMinecartCommandBlock entity) {
+            return true;
+        }
+
+        @Override
+        protected MutableBoundedValue<Integer> constructValue(Integer actualValue) {
+            return SpongeValueFactory.boundedBuilder(Keys.SUCCESS_COUNT)
+                    .minimum(0)
+                    .maximum(Integer.MAX_VALUE)
+                    .defaultValue(0)
+                    .actualValue(actualValue)
+                    .build();
+        }
+
+        @Override
+        protected boolean set(EntityMinecartCommandBlock container, Integer value) {
+            container.getCommandBlockLogic().successCount = value;
+            container.onUpdate();
+            return true;
+        }
+
+        @Override
+        protected Optional<Integer> get(EntityMinecartCommandBlock container) {
+            return Optional.of(container.getCommandBlockLogic().successCount);
+        }
+
+        @Override
+        protected ImmutableValue<Integer> constructImmutableValue(Integer value) {
+            return constructValue(value).asImmutable();
+        }
+    }
+
+    private static class CommandProcessor extends KeyValueProcessor<EntityMinecartCommandBlock, String, Value<String>> {
+
+        @Override
+        protected boolean hasData(EntityMinecartCommandBlock entity) {
+            return true;
+        }
+
+        @Override
+        protected Value<String> constructValue(String actualValue) {
+            return new SpongeValue<>(Keys.COMMAND, actualValue);
+        }
+
+        @Override
+        protected boolean set(EntityMinecartCommandBlock container, String value) {
+            container.getCommandBlockLogic().commandStored = value;
+            container.onUpdate();
+            return true;
+        }
+
+        @Override
+        protected Optional<String> get(EntityMinecartCommandBlock container) {
+            return Optional.ofNullable(container.getCommandBlockLogic().commandStored);
+        }
+
+        @Override
+        protected ImmutableValue<String> constructImmutableValue(String value) {
+            return constructValue(value).asImmutable();
+        }
+
+    }
+
+    private static class TracksOutputProcessor extends KeyValueProcessor<EntityMinecartCommandBlock, Boolean, Value<Boolean>> {
+
+        @Override
+        protected boolean hasData(EntityMinecartCommandBlock entity) {
+            return true;
+        }
+
+        @Override
+        protected Value<Boolean> constructValue(Boolean actualValue) {
+            return new SpongeValue<>(Keys.TRACKS_OUTPUT, actualValue);
+        }
+
+        @Override
+        protected boolean set(EntityMinecartCommandBlock container, Boolean value) {
+            container.getCommandBlockLogic().setTrackOutput(value);
+            container.onUpdate();
+            return true;
+        }
+
+        @Override
+        protected Optional<Boolean> get(EntityMinecartCommandBlock container) {
+            return Optional.of(container.getCommandBlockLogic().shouldTrackOutput());
+        }
+
+        @Override
+        protected ImmutableValue<Boolean> constructImmutableValue(Boolean value) {
+            return ImmutableSpongeValue.cachedOf(Keys.TRACKS_OUTPUT, false, value);
+        }
+
     }
 
 }
