@@ -1,20 +1,20 @@
 package org.spongepowered.common.mixin.core.item.crafting;
 
 import com.flowpowered.math.vector.Vector2i;
-import com.google.common.base.Optional;
 import com.google.common.collect.ImmutableList;
 import net.minecraft.inventory.InventoryCrafting;
 import net.minecraft.item.crafting.ShapedRecipes;
 import net.minecraft.world.World;
 import org.spongepowered.api.item.ItemType;
 import org.spongepowered.api.item.inventory.ItemStack;
-import org.spongepowered.api.item.inventory.types.GridInventory;
+import org.spongepowered.api.item.inventory.type.GridInventory;
 import org.spongepowered.api.item.recipe.ShapedRecipe;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 
 @Mixin(ShapedRecipes.class)
 public abstract class MixinShapedRecipe implements ShapedRecipe {
@@ -52,7 +52,7 @@ public abstract class MixinShapedRecipe implements ShapedRecipe {
     @Override
     public Optional<List<ItemStack>> getResults(GridInventory grid) {
         if (!this.isValid(grid)) {
-            return Optional.absent();
+            return Optional.empty();
         }
         // TODO GridInventory --> InventoryCrafting
         // this.getCraftingResult(grid);
@@ -71,7 +71,7 @@ public abstract class MixinShapedRecipe implements ShapedRecipe {
 
     @Override
     public Optional<ItemStack> getIngredient(int x, int y) {
-        return Optional.fromNullable((ItemStack) this.recipeItems[x + x * y]);
+        return Optional.ofNullable((ItemStack) this.recipeItems[x + x * y]);
     }
 
     @Override

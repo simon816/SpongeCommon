@@ -1,6 +1,5 @@
 package org.spongepowered.common.item;
 
-import com.google.common.base.Optional;
 import com.google.common.collect.ImmutableList;
 import net.minecraft.inventory.InventoryCrafting;
 import net.minecraft.item.Item;
@@ -8,10 +7,11 @@ import net.minecraft.item.crafting.IRecipe;
 import net.minecraft.world.World;
 import org.spongepowered.api.item.ItemType;
 import org.spongepowered.api.item.inventory.ItemStack;
-import org.spongepowered.api.item.inventory.types.GridInventory;
+import org.spongepowered.api.item.inventory.type.GridInventory;
 import org.spongepowered.api.item.recipe.Recipe;
 
 import java.util.List;
+import java.util.Optional;
 
 public class RecipeProxy {
 
@@ -42,7 +42,7 @@ public class RecipeProxy {
         @Override
         public Optional<List<ItemStack>> getResults(GridInventory grid) {
             if (!this.isValid(grid)) {
-                return Optional.absent();
+                return Optional.empty();
             }
             // TODO GridInventory --> InventoryCrafting
             // this.recipe.getCraftingResult(grid);

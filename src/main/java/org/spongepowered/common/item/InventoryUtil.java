@@ -1,11 +1,12 @@
 package org.spongepowered.common.item;
 
-import com.google.common.base.Optional;
 import org.spongepowered.api.item.inventory.Inventory;
 import org.spongepowered.api.item.inventory.ItemStack;
 import org.spongepowered.api.item.inventory.Slot;
+
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 public class InventoryUtil {
 
